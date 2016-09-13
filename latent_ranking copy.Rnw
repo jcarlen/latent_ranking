@@ -1,0 +1,1162 @@
+\documentclass{article}
+\setlength{\oddsidemargin}{0in} 
+\setlength{\textwidth}{6.5in} 
+\setlength{\evensidemargin}{0in}
+\setlength\parindent{24pt}
+
+\usepackage[natbibapa]{apacite}
+\usepackage[american]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{amssymb}
+\usepackage{fancyvrb}
+\usepackage{mathrsfs}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage[hidelinks]{hyperref}
+\usepackage{float}
+
+%from jss.cls
+\newcommand{\pkg}[1]{{\fontseries{b}\selectfont #1}}
+\let\proglang=\textsf
+\let\code=\texttt
+
+\title{Rating with Latent Space Network Models}
+
+\author{Jane Carlen \\ \emph{University of California, Los Angeles}}
+
+%\blind{\date{DRAFT COPY\\DO NOT CIRCULATE\\\today}{}}
+%\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+%\pagestyle{empty}
+\setcounter{page}{0}
+
+\abstract{We introduce a method of rating items based on network or incomplete pairwise comparison data, employing the latent space network models developed by \citet{hoff02}, \citet{hoff03} and \citet{krivitskyetal09}. This model fits positions of items in latent space, along with individualized sender and receiver coefficients that capture powers of transmission for each item. Ratings are derived from the difference in sender and receiver coefficients. Unlike existing rating methods, this provides both a measures of uncertainty in estimates and built-in visualization techniques. This complements the network data structure implicit to these types of rating problems, allowing users to see how items relate to each other simultaneously with their ratings. The method is ideal for items with nebulous similarities which can exert a range of influence on their connections. The implementation uses existing code from the \pkg{latentnet} and \pkg{visNetwork} \proglang{R} packages of \citet{latentnet} and \citet{visNetwork}. We provide two in-depth examples of the method, both including interactive visualizations. The first one addresses the problem of ratings statistics journals and second of rating movies across genres.}
+
+\newpage
+
+\section{Introduction} \label{Introduction}
+
+\subsection{Rating Methods for Network Data}\label{Rating Methods}
+    
+The task of rating items from network or incomplete pairwise comparison data is well studied in some settings, such as ranking web pages. Perhaps the best-known ranking algorithm for network data is Google's PageRank algorithm \citep{pagerank99}. Because it is generalizable, fast, and has a guaranteed solution, it has been applied in many settings, including biology, chemistry, ecology, neuroscience, physics, sports and computer systems \citep{gleich14}. In brief, it ranks pages by the eigenvector of the dominant eigenvalue of a Markov transition matrix which describes traffic flow among web pages. The rating corresponds roughly to the equilibrium amount of time an internet user would spend on a specific web page. It is worth noting that the development of PageRank was influenced by earlier work in citation analysis. \citet{pinski76} proposed a similar eigenvalue-based method for scoring journals, with an application to ranking physics journals. 
+% wiki: "The eigenvalue problem was suggested in 1976 by Gabriel Pinski and Francis Narin, who worked on scientometrics ranking scientific journals [7] and in 1977 by Thomas Saaty in his concept of Analytic Hierarchy Process which weighted alternative choices.[8]"
+
+The main advantage of a method like PageRank over raw citation count-based metrics (including Impact Factor, described below) is that citations from highly rated journals are more highly valued. As \citet{pagerank99} put it in an early paper, ``we give the following intuitive description of PageRank: a page has high rank if the sum of the ranks of its backlinks is high.'' This is crucial in ranking web pages where most linking pages are not of any interest to a user. However, it is not as important when we rank fairly homogeneous catalogs of items, and in that context can lead to overemphasizing popularity. 
+%Also the web is HUGE but the kinds of things I consider below are smaller enough to navigate, so while losing scalability isn't great, it's not the main focus. Also, new methods being developed to make this scalable? (http://papers.nips.cc/paper/4978-a-scalable-approach-to-probabilistic-latent-space-inference-of-large-scale-networks.pdf)
+
+Eigenfactor is a method similar to PageRank, but tailored specifically to rank journals \citep{eigenfactor07}. The main differences are 1) the data is normalized, i.e., we model the percentage of citations journals send to each other instead of raw counts, and 2) rather than affording every journal a uniform minimum weight
+%which ensures a solution and makes it so that if something is pointed to by a lot of sites it will come out decently important, even if those sites aren't important
+this amount is scaled to the number of articles published by each journal. (For details of the calculation see \citeauthor{eigenfactor08}.) These changes reflect the greater uniformity and much smaller scale of the journal ranking problem as compared to web-site ranking. The Eigenfactor score can be viewed as the total influence of a journal. Accordingly, the Article Influence score is proposed by \citet{eigenfactor07} as a measure of the `average influence' of an article in a given journal. It is proportional to the Eigenfactor score divided by the number of articles published by the journal. In Section \ref{Examples} we compare our journal-ranking results to rankings by these methods. 
+
+%Eigenfactor may be more appropriate for 'subscription decisions' than rank decisions, where Article Influence may be more appropriate to "measure the average influcence of articles appearing in the same journal" ... "proportional to the Eigenfactor divided by the number of articles." i.e. now penalizing for out citations
+
+
+%Also:
+%1.
+% HITS uses hub and authority scores? I tried running hits against latent space and page rank results(?)
+% not really appropriate for the journal ranking problem
+
+Another area where ratings on incomplete comparison networks have been thoroughly studied is in ranking sport and gaming competitors. The range of available methods is too broad to list here, and we refer the reader to ?? and ?? for wider surveys.) An example of a network-based rating system in the context of US college football is that of \citet{parknewman05}. The network density in that application is about 10 percent \citep{parkyook14}, and about 75 percent of matchups are between teams in the same regional conference. Their method calculates a \textit{win} score for each team as the exponentially decreasing sum of its wins, opponents wins, opponents' opponents wins, etc. A \textit{loss} score is analogously calculated and the final rank of the team is its win score minus its loss score. Their measure can be viewed as an extension of Katz centrality %the authors say it, and see 7.14 of newman. this looks the possible extension of katz centrality given there.
+
+%Further:
+%2014 paper by park and Yook? (also sports)
+%ecological network?
+%elections?
+
+There is a close relationship between the dominant methods for rating objects in networks and the task of measuring network centrality. All of the methods described above are closely connected to a well established centrality measure.
+%ImpactFactor - degree centrality
+%PageRank - eigenvector centrality/katz centrality (vs katz: http://www.sci.unich.it/~francesc/teaching/network/pagerank)
+%Park and Newman - Katz centrality
+%HITS - Authority and hub centrality]
+In contrast, the latent space method described below makes allowance for the fact that influence and centrality are not synonymous. An item may not be central, but may nonetheless have the ability to influence disparate items, and this is reflected in its rating.
+
+\subsection{Applications of Latent Space Network Models}\label{Applications}
+
+The type of latent space network model we employ has been used for network analysis, but not specifically for rating, as far as we know. For example, \citet{hoffward04} use a similar model to visualize the structure of relationships between political actors in Central Asia. %it's bilinear though
+\citet{gormley07} use a latent space model on rank data from an Irish Parliamentary election to locate voters and candidates in a single space. \citet{sewellchen15} employ such a model to dynamic network data to study network stability and the relationship between popularity and stability. They subsequently extend their model to fit dynamic clusters \citep{sewellchen16}. [I'd like to find a couple more examples to list here.]
+
+\subsection{Overview}\label{Overview}
+
+Our application of latent space network models for ratings is novel relative to comparable methods due to how it incorporates the following features: 1) accounting for similarity between nodes, whether implicit or through covarites; 2) providing measures of uncertainty in estimates; 3) meaningfully and easily visualizing results; and 4) implementation with existing \proglang{R} code. The method may be applied to any valued, directed network, which may be derived from pairwise comparison data or sets of individual rankings.
+
+Section \ref{Model} of the paper introduces the latent space network model and our method for fitting it. In Section \ref{Examples} we provide two in-depth application examples, first to ranking statistics journals using citation data (\ref{Example1}) and second to simultaneously ranking three genres of movies (\ref{Example2}). Section \ref{Discussion} concludes the paper with a discussion of the benefits, limitations, and possible future improvements to be made to the model.
+
+\section{Latent Space Network Model} \label{Model}
+
+We denote a network of $n$ nodes by its adjacency matrix $Y = \{y_{ij}\}, 1 \leq i,j \leq n$. The latent space models introduced by \citet{hoff02} assume that nodes in a network have implicit positions in ``social space''. Given these $d$-dimensional positions, $Z$, as well as possible covariates, $X$, and corresponding parameters $\beta$, the probability of an edge is independent of all other edges. 
+
+$$P(Y|X, \beta, Z) = \prod_{i\neq j} P(y_{ij}|x_{ij}, \beta, z_i, z_j)$$
+
+\citet{hoff03} recasts the conditional parameters with unobserved random effects, such that 
+
+\begin{equation}\label{eq1}
+P(Y|X, \beta, \gamma) = \prod_{i\neq j} P(y_{ij}| x_{ij}, \beta, \gamma_{ij}),
+\end{equation}
+
+
+where $\gamma$ is modeled here as in the ``distance model'' of \citet{hoff03}:
+
+$$\gamma_{ij} = a_i + b_j + \epsilon_{ij},$$
+$$\epsilon_{ij} = f(z_i,z_j) = - \lVert z_i - z_j \rVert.$$ 
+
+We consider $a_i$ and $b_j$ to be node-specific sender and receiver effects. $\lVert z_i - z_j \rVert$ is the Euclidean distance between nodal positions $z_i$ and $z_j$. (\citet{hoff02} also considers an asymmetric projection model). The positions $z$ can be in high dimension, though we usually use two or three dimensions for interpretability, visualization, and because network size encourages fewer parameters. %Didn't see max on dimension in the package. other distances are theoretically possible but the ergmm package uses Euclidean distance, see "fitting position" article, or projection distance.
+
+
+Adapting the machinery of generalized linear models,
+
+\begin{equation}\label{eq2}
+E(y_{ij}) = g^{-1}(\eta_{ij} = \beta' x_{ij} - \lVert z_i - z_j \rVert + a_i + b_j).
+\end{equation}
+
+In the context of the network data considered below, we let  $y_{ij}$ be Poisson distributed and $g$ be the standard log link function. In some cases other distributions may be more appropriate, but here we stick to the Poisson because the data is likely to represent counts, and the model is available in \pkg{latentnet}. [latentnet doesn't allow for a unique number of trials in a binomial distribution on each node, but I may code that and use it in an example. Pavel said he would add it in the package if I do.].
+%IS POISSON ALWAYS BEST FOR THIS METHOD?
+
+We note some features of the model:
+
+\begin{itemize}
+
+\item Increasing distance between $z_i$ and $z_j$ implies decreasing expectation of $y_{ij}$. One way to view this is as controlling for similarity between nodes. Nodes that would be considered similar in layman's terms are likely to have fitted positions relatively close together. Some of the magnitude of their connection is attributable to that similarly, and the rest to their individual sender and receiver effects.
+
+\item The \textit{score} of node $i$ is its receiver minus sender coefficient, $a_i - b_i$. The \textit{rank} is a monotone, integer-valued function of its score.
+
+\end{itemize}
+
+\subsection{Parameter Estimation}\label{Parameter Estimation}
+
+To estimate the necessary parameters, we embed the latent space model in a Bayesian framework.
+%"A closed form expression for the desired conditional distribution is generally unavailable" \citep{hoff03}
+We assume independent normal distributions for the components of $\gamma_i$, $i = 1,....,n$ \citep{hoff03}.
+
+$$a_i \sim N(0, \sigma_a^2))$$
+$$b_i \sim N(0, \sigma_b^2))$$
+$$z_i \sim MVN_d(\mu, I_d*\sigma_z^2))$$
+
+We place diffuse priors on the elements of $\beta$, $\sigma_z^2$, $\sigma_a^2$ and $\sigma_b^2$.
+
+$$\beta \sim N(\textbf{0}, I\sigma_\beta^2)$$ %ergmm default 0,9
+$$\sigma_a^2 \sim \text{Inv-}\chi^2 (v_a, s^2_a))$$ %ergmm default 3,1
+$$\sigma_b^2 \sim \text{Inv-}\chi^2 (v_b, s^2_b))$$ %ergmm default 3,1
+%documentation for rsender/rreceiver says prior for variance of those effects has scale-inverse-chi-squared distribution which is equivalent to the inverse gamma described in the papers, just reparameterized.-->
+$$\sigma_z^2 \sim \text{Inv-}\chi^2 (v_z, s^2_z))$$ %ergmm determined by default function below - 
+
+%InitErgmm.euclidean<-function(model, d, G=0, var.mul=1/8, var=NULL, var.df.mul=1, var.df=NULL, mean.var.mul=2, mean.var=NULL, pK.mul=1, pK=NULL)
+
+% What is the motivation for these functions? Documented somewhere?
+
+%1. Z.var - scale parameter of the inverse chi square prior on var of z's
+%  if(!("Z.var" %in% names(model[["prior"]]))) model[["prior"]][["Z.var"]]<-model[["prior"]][["Z.var.mul"]]*(network.size(model[["Yg"]])/max(1,model[["G"]]))^(2/model[["d"]])
+%DEFAULT: 1/8 * #vertices / max(1, #clusters)^(2/dimension)
+
+%2. Z.var.df - dof parameter of the inverse chi square prior on var of z's
+%  if(!("Z.var.df" %in% names(model[["prior"]]))) model[["prior"]][["Z.var.df"]]<-model[["prior"]][["Z.var.df.mul"]]*sqrt(network.size(model[["Yg"]])/max(1,model[["G"]]))
+%DEFAULT: 1 * sqrt(#vertices) / max(1, #clusters)
+% why sqrt? based on presumed density/dependence?
+
+<<r more_prior_notes, eval = F, echo = F, warning = F, message= F>>=
+#3. Z.mean.var - variance of the gaussian prior on cluster means, if necessary
+# if(!("Z.mean.var" %in% names(model[["prior"]]))) model[["prior"]][["Z.mean.var"]]<-model[["prior"]][["Z.mean.var.mul"]]*model[["prior"]][["Z.var"]]*max(1,model[["G"]])^(2/model[["d"]])
+#DEFAULT:  2 * Z.var * max(1, #clusters)^(2/dimension)
+
+#4. Z.pK - parameter (#clusters) of the dirichlet prior on cluster assignment, if nec.
+#if(!("Z.pK" %in% names(model[["prior"]]))) model[["prior"]][["Z.pK"]]<-model[["prior"]][["Z.pK.mul"]]*sqrt(network.size(model[["Yg"]])/max(1,model[["G"]]))
+#DEFAULT:  1 * sqrt(#vertices)/max(1,#clusters)
+@
+
+The model above is implemented in the \code{ergmm} function of \pkg{latentnet} \citep{latentnet_jss}. In \code{ergmm}, the default value for $\sigma_\beta^2$ is $9$. %hoff03 uses 100. Should I check if wider is better? 
+The default value for the degrees of freedom parameters $v_a$, $v_b$ is $3$, and for the scale parameters $s^2_a$, $s^2_b$ is $1$. The default value for $v_z$ is $\sqrt{n}$ and the default for its scale parameter $s^2_z$ is $\frac{n}{8}$. %these defaults assume no clusters in the model
+See Appendix \ref{Appendix1} for details of the MCMC algorithm used to fit the model.
+
+<<r invchisq, eval = T, results = 'hide', echo = F, cache = T, warning = F, message = F>>=
+#took these from geoR package which was crashing
+
+rinvchisq <- function (n, df, scale = 1/df) 
+{
+  if ((length(scale) != 1) & (length(scale) != n)) 
+    stop("scale should be a scalar or a vector of the same length as x")
+  if (df <= 0) 
+    stop("df must be greater than zero")
+  if (any(scale <= 0)) 
+    stop("scale must be greater than zero")
+  return((df * scale)/rchisq(n, df = df))
+}
+
+dinvchisq <-function (x, df, scale = 1/df, log = FALSE) 
+{
+  if (df <= 0) 
+    stop("df must be greater than zero")
+  if (scale <= 0) 
+    stop("scale must be greater than zero")
+  nu <- df/2
+  if (log) 
+    return(ifelse(x > 0, nu * log(nu) - log(gamma(nu)) + 
+                    nu * log(scale) - (nu + 1) * log(x) - (nu * scale/x), 
+                  NA))
+  else return(ifelse(x > 0, (((nu)^(nu))/gamma(nu)) * (scale^nu) * 
+                       (x^(-(nu + 1))) * exp(-nu * scale/x), NA))
+}
+@
+
+\section{Examples}\label{Examples}
+
+<<r setup, echo = F, include=FALSE, warning = F, message= F, cache = T, results = 'hide'>>=
+knitr::opts_chunk$set(echo = FALSE, results = 'hide')
+library(ergm)
+library(ernm)
+@
+
+<<r setup2, cache = T, echo = F, results='hide', warning=F, echo = F, message=F>>=
+library(latentnet)
+library(ergm.count)
+#load matrix
+
+Cmatrix <- as.matrix(read.csv("~/Documents/citation/Citation_supplement/Data/cross-citation-matrix.csv", row.names = 1)) #47 x 47 #
+
+#Self-citations are removed: The highest raw counts are from self-citations of CSDA (486) and StMed (628), which would seem to skew any analysis of importance. The authors exclude self-citations for the Stigler method: "Both the eigenfactor and the article influence score are computed over a 5-year time period, with journal self-citations removed to eliminate possible sources of manipulation."
+
+Cmatrix.diag = Cmatrix #store a copy before removing diag
+diag(Cmatrix) = rep(0,47) #shouldn't actually matter, as.network zeros out diag
+
+#Note the use of the tranposed Cmatrix in the next line to correspond to standard i,j entry = citation FROM i to j. Original Cmatrix has i,j indicates citation from j to i.
+
+Cnet = as.network(t(Cmatrix), directed=T, matrix.type="a", ignore.eval=F,  
+       names.eval="citations") #as valued net, see \cite{krivitsky2015}
+
+#as a binary network
+Cbinet <- as.network(t(Cmatrix))
+
+#cited/citing
+cited = rowSums(Cmatrix) #citations in
+citing = colSums(Cmatrix) #citations out
+cite.ratio = cited/citing
+
+#normalized
+Cmatrix.norm = t(Cmatrix)/citing #entries are % of i's citations to j (column)
+Cnet.norm = as.network(Cmatrix.norm, directed=T, matrix.type="a", ignore.eval=F,
+            names.eval="citations")
+@
+
+<<r setup_jrss, cache = T, echo = F, results='hide', warning=F, echo = F, message=F, dependson = "setup">>=
+#code from JRSS-PR-SA-Dec-13-0008_supplement.R to the paper
+journal.abbr <- rownames(Cmatrix)
+
+Tmatrix <- Cmatrix + t(Cmatrix)
+diag(Tmatrix) <- diag(Cmatrix.diag)
+
+journals.cluster <- hclust(d = as.dist(1 - cor(Tmatrix)))
+#plot(journals.cluster, sub = "", xlab = "")
+#cutree(journals.cluster, h = 0.6)  
+library(BradleyTerry2)
+
+Cdata <- countsToBinomial(Cmatrix)
+fit <- BTm(outcome = cbind(win1, win2), player1 = player1, player2 = player2, data = Cdata)
+
+npairs <- NROW(Cdata)
+njournals <- nlevels(Cdata$player1)
+phi <- sum(residuals(fit, "pearson")^2) / (npairs - (njournals - 1))
+
+## 3.1 Journal residuals
+journal.res <- rep(NA, njournals)
+res <- residuals(fit, type = "pearson")
+coefs <- c(0, coef(fit)) # 0 is the coefficient of the first journal
+for(i in 1:njournals){
+    A <- which(Cdata$player1 == journal.abbr[i])
+    B <- which(Cdata$player2 == journal.abbr[i])
+    y <- c(res[A], -res[B])
+    x <- c(-coefs[Cdata$player2[A]], -coefs[Cdata$player1[B]])
+    journal.res[i] <- sum(y * x) / sqrt(phi * sum(x ^ 2))
+}
+names(journal.res) <- journal.abbr
+
+library(qvcalc)
+cov.matrix <- matrix(0, nrow = njournals, ncol = njournals)
+cov.matrix[-1, -1] <- vcov(fit)
+qse <- qvcalc(phi * cov.matrix , estimates = c(0, coef(fit)),
+              labels = journal.abbr)
+
+export.scores <- qse$qvframe$estimate
+export.scores <- export.scores - mean(export.scores)
+names(export.scores) <- journal.abbr
+
+sort.id <- sort(export.scores, decreasing = TRUE, index.return = TRUE)$ix
+fit.table <- data.frame(quasi = export.scores[sort.id], qse = qse$qvframe$quasiSE[sort.id])
+rownames(fit.table)
+rownames(fit.table)[c(1,6,20)] = c("JRSS-B", "JRSS-A", "JRSS-C")
+match(rownames(fit.table),Cnet%v%"vertex.names")
+fit.table2 = fit.table[order(match(rownames(fit.table),Cnet%v%"vertex.names")),]
+@
+
+\subsection{Ranking Statistics Journals Using Citation Data}\label{Example1}
+
+In this example we examine rankings of 47 statistics and probability journals, comparing the output of the latent space model to other methods. The data was first gathered and analyzed by \citet{varinetal} from Journal Citation Reports \citep{JCR}. It consists of a $47 \times 47$ matrix of directed citation counts between these journals, encompassing all within-network citations from 2001 to 2010. \citeauthor{varinetal} selected this $47$-journal subset from the full set of $110$ statistics and probability journals because their model, presented below, requires that journals are fairly homogeneous and have a high level of citation exchange. %"A key requirement for the methods that are described here, as well as in our view for any sensible analysis of citation data, is that the journals jointly analysed should be as homogeneous as possible. Accordingly, analyses are conducted on a subset of the journals from the statistics and probability category, among which there is a relatively high level of citation exchange."" [@varinetal]
+
+%The percent of citations to/from other statistics journals considered is roughly 15 to 60 percent. The median fraction of sent citations lost by subsetting from statistics journals is 4%; received is 7%. <!--of the statistics and probability category of JCR-->
+
+There is a well documented need for a journal ranking system better than the `Impact Factor' (IF). IF is the most commonly referenced measure of journal influence and importance, and the only such measure listed on the sidebar of a journal's Wikipedia page. It measures how frequently articles from a specific journal are cited: An IF of $1.0$ means that articles published by that journal in the last two years have been cited once on average \citep{JCR}. The Journal Citation Reports also publish modified versions of IF that exclude journal self-citations or alter the size of the time window averaged over to one or five years.
+
+% The Immediacy Index only averages over citations receved in the last year, while the IF5 expands the window to five years. The IFno excludes journal self-citations \citep{varinetal}. This addresses a major criticism of the impact factor, which is that journals can artificially inflate their score, whether intentionally or not, by encouraging cross-citations in published articles. Changing the size of the window for citations balances the criticism that articles may not achieve peak influence for several or more years, a lag that depends on the publication field, with the desire to include newer journals in the rankings and measure immediate impact.
+%A 5-year Impact Factor is also published --  The 5-year journal Impact Factor is the average number of times articles from the journal published in the past five years have been cited in the JCR year. It is caclulated by dividing the number of citations in the JCR year by the total number of articles published in the five previous years.
+%JCR Year (Journal Citation Report Year): The year of the JCR edition displayed in the top right-hand corner of the page. Each JCR year contains one year of citation data. You select the JCR year on the Welcome page.-->
+
+
+<<r cite_cor, echo = F, results = 'hide', eval = T, cache = T, dependson = c("setup", "setup_jrss")>>=
+ij = t(Cmatrix)[lower.tri(t(Cmatrix), diag = F)]
+ji = Cmatrix[lower.tri(Cmatrix, diag = F)]
+cor(ij, ji)
+@
+
+Variable time windows and exclusion of self-citations address two problems with the Impact Factor, but there are additional problems. First, there is no normalization for article length and out-citations, which can drive up IF. Longer articles may be cited more frequently and, whether planned or not, there is documented reciprocity in citations between journals. For example, in the data described below the correlation in one-way citations, i.e. $i \to j$ and $j \to i$ is $.57$. Further, the distribution of citations counts by article is very long tailed, with a few articles receiving many citations and most receiving only a few. As David Colquhoun writes in the Discussion on the paper by \citet{varinetal}, ``It has been obvious for a long time that it is \textit{statistically illiterate} to characterize very skew distributions by their mean. And it is \textit{statistically illiterate} to present point estimates with no indication of their uncertainty'' (\citet{varinetal} [cite discussion], emphasis added). 
+%discuss later how poisson modelling (or binary) is good for this? is it?
+John Aston further comments in the same discussion, this is ``inherently dangerous if weight is given to such metrics in crucial decisions such as grant awards or promotion and tenure cases'' (\citet{varinetal} [cite discussion]). %Additionally, it is fair to argue that authors should not be judged at all on the journal ranking (importance by association) but we're just not addressing that here. that's for another paper. 
+
+\subsubsection{The Quasi-Stigler Model} \label{The Quasi-Stigler Model}
+ 
+\citet{varinetal} introduce the \textit{quasi-Stigler} model to address the criticisms above. The model measures each journal's `propensity to export intellectual influence' (\citet{varinetal}, quoting Stephen Stigler). The rank of journal $i$ is determined by its \textit{export score}, $u_i$, given as follows:
+
+\begin{equation}\label{eq3}
+\mu_i = b_i - a_i, \text{ where } c_{ij} \text{ is binomially distributed and } E(c_{ij}) = t_{ij}\exp{(a_i+b_j)}. 
+\end{equation}
+
+\noindent $c_{ij}$ is the number of citations from journal $i$ to journal $j$ and $t_{ij} = c_{ij} + c_{ji}$. (This is the quasi-symmetry formulation of \citet{varinetal} (4) with some notation changes and transposition of the citation matrix $\{c_{ij}\}$.) As in the latent space model, $a$ and $b$ are considered to be sender and receiver parameters respectively. We note that the export scores are equivalent to estimates from a quasibinomial generalized linear model with logit link and response vector $\{\frac{c_{ij}}{t_{ij}}\}$.
+
+<<r glm, eval = T, cache = T, echo = F, results = 'hide', dependson= c("setup", "setup_jrss", "latent_sr1"), fig.keep='none', warning=F>>=
+
+Tmatrix <- Cmatrix + t(Cmatrix)
+
+#### 1. Binomial GLM ####
+
+#build design matrix
+n = 47
+x1 = matrix(0,n^2,n)
+for (i in 1:n) { #sender
+  for (j in 1:n) { 
+    if (i != j) {
+      x1[n*(i-1)+j,i]=1;
+      x1[n*(i-1)+j,j]=-1;
+    }
+  }
+}
+
+#response
+y = as.vector(t(Cmatrix))/as.vector(Tmatrix)
+y[is.nan(y)]=0
+
+#model
+g1 = glm(y~x1-1,family = quasibinomial(link="logit"), weights = as.vector(Tmatrix))
+
+# Results Identical to Sigler
+
+cor(fit.table2$quasi, g1$coefficients, use="pairwise.complete.obs")
+    # The constraint is not implemented directly so one score is NA
+    # OR, as if we set last coef to 0
+    cor(fit.table2$quasi, c(g1$coefficients[1:46], 0) )
+    
+plot(fit.table2$quasi, g1$coefficients, ylab = "glm", xlab = "Stigler") 
+    #shifted by -.7 = fit.table2$quasi[47]
+
+summary(y-predict(g1)*as.vector(Tmatrix))
+
+# Overdispersion - no need to estimate seperately
+summary(g1)$dispersion
+
+#### 1a. Binomial GLM sender + receiver ####
+
+#Setting it up with "sender"" and "receiver" effects in the design matrix gives basically the same results but it's superfluous, as the "sender" and "receiver" coefficents are perfectly negatively correlated (we're really fitting the differences).
+
+#build design matrix:
+x1a = matrix(0,n^2,2*n)
+for (i in 1:n) { #sender
+  for (j in 1:n) { 
+    if (i != j) {
+      x1a[n*(i-1)+j,i]=1;
+      x1a[n*(i-1)+j,j+n]=1;
+    }
+  }
+}
+
+g1a = glm(y~x1a-1,family = quasibinomial(link="logit"), weights = as.vector(Tmatrix))
+
+#identical to Stigler up to scaling and loss of 1 DOF (last value NA) :
+cor(fit.table2$quasi, g1a$coefficients[1:47]-g1a$coefficients[48:94], use="pairwise.complete.obs") #=1
+
+#"receiver" and "sender" coefficents perfectly negatively correlated.
+cor(g1a$coefficients[1:47], g1a$coefficients[48:94], use = "complete.obs")
+
+#### 2. Poisson GLM (compare to latent.srp1) ####
+
+#response
+y2 = as.vector(t(Cmatrix))
+
+#model
+g2a = glm.fit(x1a-1, y2, family = poisson(link="log"))
+# matches latent.srp1. (where no option for weights or quasi)
+# what if weighted and quasi? more appropriate? should these be options of ergmm?
+# remember with binomial we have the added constraint that y_ij + y_ji = 1
+
+#  g2a
+# MKL S-R fit estimates almost match (shifted) latent.srp1 estiamtes
+# Are the underlying models the same, just by different fits?
+# '"glm.fit" uses iteratively reweighted least squares (IWLS)' (always same output)
+# ergmm uses mcmc (output differs slightly each time)
+
+#plot(latent.srp1$mkl$beta[48:94] - latent.srp1$mkl$beta[1:47],
+#     g2a$coefficients[48:94] - g2a$coefficients[1:47])
+#cor(latent.srp1$mkl$beta[48:94] - latent.srp1$mkl$beta[1:47],
+#    g2a$coefficients[48:94] - g2a$coefficients[1:47], use="complete.obs") #.999
+
+#Poisson S-R GLM also close to Stigler:
+cor(fit.table2$quasi, g2a$coefficients[1:47] - g2a$coefficients[48:94], 
+    use="complete.obs")
+plot(fit.table2$quasi, g2a$coefficients[1:47] - g2a$coefficients[48:94])
+
+#### end ####
+@
+
+The uncertainty in the export scores is conveyed through the \textit{quasi-variance}, $qvar_i$, of each $\mu_i$. The quasi-variances are estimated to minimize the difference between the true pairwise variances, $var(\hat{\mu}_i - \hat{\mu}_j)$, and a quasi-variance approximation, $qvar_i+qvar_j$. Although conveying exact variances would be possible in this case, the authors prefer quasi-variances because they can be succinctly displayed alongside export scores. Below we analyze the output of this model relative to others discussed.
+
+\subsubsection{Summary of Journal Rankings} \label{Summary}
+
+<<r latent_sr2, eval = T, results = 'hide', echo = F, cache=T, dependson=c("setup","setup2"), warning=F>>=
+
+latent.srp2 = readRDS("/Users/jac/Documents/citation/Sunbelt/latent_srp2R.RDS")
+
+@
+
+<<r latent_sr2_formula, eval = F, results = 'hide', echo = F, cache=T, warning=F>>=
+latent.srp2 = ergmm(Cnet~euclidean(d=2) + rsender +
+       rreceiver, response = "citations",
+       family="Poisson.log", seed=30,
+       control=ergmm.control(burnin=500000, interval=500, 
+       sample.size=10000))
+@
+
+%There is a correlation with page rank results but it is not very strong. From plotting the ranks together we see that heavily cited journals rank highly under PageRank and lightly cited journals do poorly. The method does not balance for the a journal's outcitations as the quasi-Stigler or latent space methods do.
+
+% PageRank does do something that other methods i'm talking about don't, which is weight citations by importance of the citing journal.
+
+<< pagerank, eval = T, cache = T, echo = F, results = 'hide',dependson = c("setup", "setup_jrss", "latent_sr1"), fig.keep = 'none', message = F, warning = F>>=
+
+# "Page rank is the best-known technique for link-based importance ranking"
+# https://www.cs.umd.edu/class/spring2008/cmsc828g/Slides/node-ranking.pdf
+
+# PageRank has been applied to citation data:
+# http://arxiv.org/pdf/0901.2640.pdf <- prob most useful, good summary
+# http://arxiv.org/pdf/1012.4872.pdf (damping factor)
+# http://onlinelibrary.wiley.com/doi/10.1002/asi.21452/epdf (weighted page rank)
+
+# apply page rank ####
+library(igraph)
+Cgraph = graph.adjacency(t(Cmatrix), weighted=T) #transpose so that i,j indicates citation from i to j.
+#get.edge.attribute(Cgraph, "weight")
+Cgraph.page.rank = page.rank(Cgraph, damping = .95)$vector #"If weights arg is NULL and the graph has a weight edge attribute then that is used."
+# note, EXTREMELY fast
+#       page rank normalizes so doing that wouldn't change results
+
+# compare results to other ranks ####
+
+## to cited/citing ratio
+plot(Cgraph.page.rank, cite.ratio)
+cor(Cgraph.page.rank, cite.ratio) #.68
+
+## to quasi-stigler
+
+### scores
+plot(Cgraph.page.rank, fit.table2$quasi, type = "n")
+text(labels = names(Cgraph.page.rank), x = Cgraph.page.rank, y = fit.table2$quasi, cex = .5, xlab = "PageRank", ylab = "quasi-Stigler", srt = -45)
+cor(Cgraph.page.rank, fit.table2$quasi) #.659 with damping at .95, and .65 with damping at .85
+
+### ranks
+temp = data.frame(row.names = names(Cgraph.page.rank))
+temp[,1] = rank(Cgraph.page.rank)
+temp[,2] = rank(fit.table2$quasi)
+plot(temp, type = "n", xlab = "PageRank", ylab = "quasi-Stigler")
+text(labels = rownames(temp), x = temp[,1], y = temp[,2], cex = .5)
+
+### raw counts
+cor(Cgraph.page.rank, colSums(t(Cmatrix))) #.985 - correlates very highly with number of  citations received
+plot(Cgraph.page.rank, colSums(t(Cmatrix)))
+#plot(vc2, colSums(t(Cmatrix))) how would latent space compare?
+@
+
+<<r Eigenfactor, eval = T, echo = F, cache = T, results = 'hide', fig.keep = 'none', dependson = c("latent_srp2")>>=
+
+# http://www.eigenfactor.org/projects/journalRank/rankings.php?search=XY&year=2010&searchby=isicat&orderby=Eigenfactor
+# 2010, going back five years
+
+EF = c(0.004,0.003,0.035,0.002,0.008,0.005,0.02,0.018,0.012,0.004,0.003,0.006,0.002,0.022,0.002,0.003,0.002,0.002,0.04,0.002,0.004,0.007,0.011,0.002,0.007,0.021,0.004,0.003,0.017,0.007,0.004,0.002,0.002,0.006,0.006,0.006,0.002,0.038,0.005,0.001,0.001,0.002,0.011,0.008,0.007,0.006,0.003)
+
+AI = c(.9, .7, 3.3, .6, 1.6, .8, 1.6, 2.4, 2.3, 1.2, .3, .3, .5, .8, .9, .6, .6, .7, 3.3, .3, .6, 1.6, .9, .5, 1.8, 4.8, 1.0, .4, .6, 1.7, .9, .9, .5, 1.4, 2.0, 1.8, .5, 1.3, 1.5, .8, .5, .4, .4, 3.4, 1.0, 1.4, 1.2)
+
+names(EF) =  names(AI) = c('AmS','AISM','AoS','ANZS','Bern','BioJ','Bcs','Bka','Biost','CJS','CSSC','CSTM','CmpSt','CSDA','EES','Envr','ISR','JABES','JASA','JAS','JBS','JCGS','JMA','JNS','JRSS.A','JRSS.B','JRSS.C','JSCS','JSPI','JSS','JTSA','LDA','Mtka','SJS','StataJ','StCmp','Stats','StMed','SMMR','StMod','StNee','StPap','SPL','StSci','StSin','Tech','Test')
+
+par(mfrow = c(2,2))
+#vs latent 
+plot(fit.table2$quasi, EF, main = as.character(round( cor(fit.table2$quasi, EF), 3)), type ="n")
+text(names(EF), x = fit.table2$quasi, y = EF, cex = .6) 
+#the fact that StMed scores very highly on eigenfactor is a knock against it. StMed is middle of the road in cited/citing ratio and latent score and pagerank
+plot(fit.table2$quasi, AI, main = as.character(round( cor(fit.table2$quasi, AI), 3)), type ="n")
+text(names(AI), x = fit.table2$quasi, y = AI, cex = .6) 
+
+#vs page rank
+#PageRank does not directly penalize out-links, even though journals which cite much more often than they are cited are less likely to be highly regarded. 
+
+plot(Cgraph.page.rank, EF, main = as.character(round( cor(Cgraph.page.rank, EF), 3)), type ="n")
+text(names(EF), x = Cgraph.page.rank, y = EF, cex = .6) 
+
+plot(Cgraph.page.rank, AI, main = as.character(round( cor(Cgraph.page.rank, AI), 3)), type ="n")
+text(names(AI), x = Cgraph.page.rank, y = AI, cex = .6) 
+
+# compared to latent and colored by cluster
+#par(mfrow = c(1,1))
+#plot(vc2, AI, main = as.character(round( cor(vc2, AI), 3)), type ="n")
+#text(names(AI), x = vc2, y = AI, cex = .9, col = cutree(journals.cluster, h = 0.6)+3) #shows AI seems to place "general" and "computational" publications lower as opposed to latent method (because light blue color at the bottom)
+
+@
+
+<<r HITS, eval = F, echo = F, cache = F>>=
+library(igraph)
+
+# http://stackoverflow.com/questions/29911300/how-to-get-the-hits-function-in-r-tool
+HITS<-function(g,k)  { 
+    adj <- g
+    nodes <- dim(adj)[1] 
+    auth <- c(rep(1,nodes)) 
+    hub <- c(rep(1,nodes)) 
+    for(i in 1:k){ 
+        t_adj <- t(adj) 
+        auth <- t_adj%*%hub 
+        hub <- adj%*%auth 
+        sum_sq_auth <- sum(auth*auth) 
+        sum_sq_hub <- sum(hub*hub) 
+        auth <- auth/sqrt(sum_sq_auth) 
+        hub <- hub/sqrt(sum_sq_hub) 
+    } 
+    result <- data.frame(auth = auth,hub = hub)   
+    return(result) 
+}
+
+hits <- HITS(Cmatrix, 100)
+par(mfrow = c(2,2))
+cor(vc2, hits$auth) #not similar
+cor(vc2, hits$hub) #a bit similar
+plot(vc2, hits$hub)
+cor(Cgraph.page.rank, hits$auth) #a bit simlar
+plot(Cgraph.page.rank, hits$auth) 
+cor(Cgraph.page.rank, hits$hub) #very similar
+plot(Cgraph.page.rank, hits$hub)
+cor(Cgraph.page.rank, hits$auth+hits$hub) 
+plot(Cgraph.page.rank, hits$auth+hits$hub) 
+@
+
+Table \ref{summarytable_rank} compares journal rankings from our latent space network model, the quasi-Stigler model, Eigenfactor, Article Influence, and PageRank. Rank comparisons to several types of Impact Factor can be found in Table 4 of \citet{varinetal}. We choose to present rank rather than rating to facilitate comparisons across the varying scales of the methods. 
+
+<<r summarytable, eval = T, cache = T, echo = F, results = 'hide', dependson = c("setup", "setup_jrss", "latent_sr2", "pagerank", "Eigenfactor"), warning = F, message = F >>=
+
+# varintable <- read.csv("/Users/jac/Documents/citation/Varin_Cattelan_Firth_supplement/Data/journal-scores.csv")
+# can't use this table directly it includes too many journals
+
+summarytable_rate = round(data.frame("Latent Space" = latent.srp2$mkl$receiver - latent.srp2$mkl$sender,
+                          "quasi-Stigler"= fit.table2$quasi,
+                          "PageRank" = Cgraph.page.rank,
+                          "Eigenfactor" = EF,
+                          "Article Influence" = AI),3)
+
+summarytable_rank = data.frame(
+                          "Latent Space" = order(order(latent.srp2$mkl$receiver - latent.srp2$mkl$sender, decreasing = T)),
+                          "quasi-Stigler"= order(order(fit.table2$quasi, decreasing = T)),
+                          "PageRank" = order(order(Cgraph.page.rank, decreasing = T)),
+                          "Eigenfactor" = order(order(EF, decreasing = T)),
+                          "Article Influence" = order(order(AI, decreasing = T)))
+rownames(summarytable_rank) = rownames(summarytable_rate) 
+
+library(xtable)
+#xtable(summarytable_rank)
+@
+
+\begin{table}\label{summarytable_rank}
+\caption{Nonlinear Model Results} 
+\centering
+\begin{tabular}{rrrrrr}
+  \hline
+ & Latent Space & quasi-Stigler & PageRank & Eigenfactor & Article Influence \\ 
+  \hline
+AmS &  12 &  12 &  38 &  25 &  22 \\ 
+  AISM &  15 &  15 &  33 &  30 &  30 \\ 
+  AoS &   3 &   2 &  11 &   3 &   3 \\ 
+  ANZS &  24 &  22 &  40 &  35 &  32 \\ 
+  Bern &  11 &   7 &  37 &  12 &  11 \\ 
+  BioJ &  34 &  33 &  14 &  23 &  27 \\ 
+  Bcs &   6 &   5 &   9 &   6 &  12 \\ 
+  Bka &   2 &   3 &  17 &   7 &   5 \\ 
+  Biost &   8 &   9 &  22 &   9 &   6 \\ 
+  CJS &  14 &  16 &  29 &  26 &  18 \\ 
+  CSSC &  46 &  45 &   8 &  31 &  45 \\ 
+  CSTM &  41 &  41 &   5 &  18 &  46 \\ 
+  CmpSt &  39 &  38 &  34 &  36 &  37 \\ 
+  CSDA &  37 &  36 &   1 &   4 &  28 \\ 
+  EES &  33 &  35 &  41 &  37 &  23 \\ 
+  Envr &  25 &  27 &  31 &  32 &  33 \\ 
+  ISR &  17 &  14 &  46 &  38 &  34 \\ 
+  JABES &  29 &  28 &  43 &  39 &  31 \\ 
+  JASA &   4 &   4 &   6 &   1 &   4 \\ 
+  JAS &  47 &  47 &  10 &  40 &  47 \\ 
+  JBS &  44 &  43 &  20 &  27 &  35 \\ 
+  JCGS &   9 &  10 &  23 &  14 &  13 \\ 
+  JMA &  35 &  34 &   4 &  10 &  24 \\ 
+  JNS &  38 &  37 &  19 &  41 &  38 \\ 
+  JRSS.A &   7 &   6 &  42 &  15 &   8 \\ 
+  JRSS.B &   1 &   1 &  28 &   5 &   1 \\
+  JRSS.C &  23 &  20 &  32 &  28 &  20 \\ 
+  JSCS &  43 &  44 &  12 &  33 &  42 \\ 
+  JSPI &  31 &  31 &   2 &   8 &  36 \\ 
+  JSS &  42 &  42 &  24 &  16 &  10 \\ 
+  JTSA &  13 &  13 &  44 &  29 &  25 \\ 
+  LDA &  18 &  19 &  36 &  42 &  26 \\ 
+  Mtka &  28 &  29 &  30 &  43 &  39 \\ 
+  SJS &   5 &   8 &  25 &  19 &  15 \\ 
+  StataJ &  22 &  24 &  47 &  20 &   7 \\ 
+  StCmp &  26 &  23 &  26 &  21 &   9 \\ 
+  Stats &  36 &  39 &  21 &  44 &  40 \\ 
+  StMed &  19 &  21 &   3 &   2 &  17 \\ 
+  SMMR &  32 &  32 &  27 &  24 &  14 \\ 
+  StMod &  30 &  30 &  39 &  46 &  29 \\ 
+  StNee &  20 &  26 &  45 &  47 &  41 \\ 
+  StPap &  45 &  46 &  18 &  45 &  43 \\ 
+  SPL &  27 &  25 &   7 &  11 &  44 \\ 
+  StSci &  21 &  18 &  15 &  13 &   2 \\ 
+  StSin &  16 &  17 &  13 &  17 &  21 \\ 
+  Tech &  10 &  11 &  35 &  22 &  16 \\ 
+  Test &  40 &  40 &  16 &  34 &  19 \\ 
+   \hline
+\end{tabular}
+\end{table}
+
+COMPARE VARIANCE FROM LATENT AND QUASI ONLY
+
+We present the variability in journal scores, i.e. $var(b_i - a_i)$ in Figure \ref{}. We estimate this from the sample of draws from the posterior distribution of parameters that is stored by the \pkg{latentnet} model. Figure \ref{} displays the point estimates and $1.96$ estimated standard deviations in each direction, analogous to Figure 4 of \citep{varinetal}. The results are similar, but we notice more uniform variance throughout the journals in the latent space model. %maybe due to the prior?
+
+<<r latent2_variance, eval = T, echo = F, cache = T, warning = F, message = F, results = 'hide', dependson= c("setup", "latent_sr2", "setup_jrss", "latent2_stigler"), fig.cap = "Visualizing uncertainty of score estimates. The error bars are +/- 1.96 estimated standard deviations of the score variance.">>=
+
+# from plotrix package, had to make some changes ####
+# added cex arg and commented out something with segs[4, and x axis label
+
+centipede.plot <- function (segs, mct = "mean", lower.limit = "std.error", upper.limit = lower.limit, 
+    left.labels = NULL, right.labels = NULL, sort.segs = TRUE, 
+    main = "", xlab = NA, pch = 21, vgrid = NA, hgrid = NA, gridcol = "lightgray", 
+    mar = NA, col = par("fg"), bg = "green", cex = NULL, ...) 
+{
+    if (missing(segs)) {
+        cat("Usage: centipede.plot(segs,...)\n\twhere segs is a dstat object")
+        stop("or a matrix of midpoints and limits")
+    }
+    if (is.list(segs)) {
+        if (all(lapply(segs, is.numeric))) 
+            segs <- get.segs(segs, mct = mct, lower.limit = lower.limit, 
+                upper.limit = upper.limit)
+        else stop("If segs is a list, all the components must be numeric")
+    }
+    if (class(segs) == "dstat") {
+        midpoint <- "mean"
+        if (lower.limit == "var") {
+            if (rownames(segs)[2] == "var") 
+                ll <- segs[1, ] - segs[2, ]
+            if (rownames(segs)[2] == "sd") 
+                ll <- segs[1, ] - segs[2, ] * segs[2, ]
+        }
+        if (upper.limit == "var") {
+            if (rownames(segs)[2] == "var") 
+                ul <- segs[1, ] + segs[2, ]
+            if (rownames(segs)[2] == "sd") 
+                ul <- segs[1, ] + segs[2, ] * segs[2, ]
+        }
+        if (lower.limit == "sd") {
+            if (rownames(segs)[2] == "var") 
+                ll <- segs[1, ] - sqrt(segs[2, ])
+            if (rownames(segs)[2] == "sd") 
+                ll <- segs[1, ] - segs[2, ]
+        }
+        if (upper.limit == "sd") {
+            if (rownames(segs)[2] == "var") 
+                ul <- segs[1, ] + sqrt(segs[2, ])
+            if (rownames(segs)[2] == "sd") 
+                ul <- segs[1, ] + segs[2, ]
+        }
+        if (lower.limit == "std.error") {
+            if (rownames(segs)[2] == "var") 
+                ll <- segs[1, ] - sqrt(segs[2, ])/sqrt(segs[3, 
+                  ])
+            if (rownames(segs)[2] == "sd") 
+                ll <- segs[1, ] - segs[2, ]/sqrt(segs[3, ])
+        }
+        if (upper.limit == "std.error") {
+            if (rownames(segs)[2] == "var") 
+                ul <- segs[1, ] + sqrt(segs[2, ])/sqrt(segs[3, 
+                  ])
+            if (rownames(segs)[2] == "sd") 
+                ul <- segs[1, ] + segs[2, ]/sqrt(segs[3, ])
+        }
+        segs <- rbind(segs[1, ], ll, ul, segs[3, ])
+    }
+    segdim <- dim(segs)
+    if (sort.segs) {
+        seg.order <- order(segs[1, ])
+        segs <- segs[, seg.order]
+    }
+    else seg.order <- 1:segdim[2]
+    oldpar <- par("mar")
+    if (is.na(mar[1])) 
+        mar <- c(4, 6, 1 + 2 * (nchar(main) > 0), 5)
+    par(mar = mar)
+    plot(x = c(min(segs[2, ]), max(segs[3, ])), y = c(1, segdim[2]), 
+        main = main, xlab = "", ylab = "", type = "n", axes = FALSE, 
+        ...)
+    box()
+    if (!is.na(vgrid[1])) 
+        abline(v = vgrid, lty = 1, col = gridcol)
+    if (is.null(hgrid)) 
+        abline(h = 1:segdim[2], lty = 2, col = gridcol)
+    else if (!is.na(hgrid[1])) 
+        abline(h = hgrid, lty = 2, col = gridcol)
+    axis(1, cex.axis = cex)
+    arrows(segs[2, ], 1:segdim[2], segs[3, ], 1:segdim[2], length = 0.05, 
+        angle = 90, code = 3, col = col)
+    points(segs[1, ], 1:segdim[2], pch = pch, col = col, bg = bg)
+    if (is.null(left.labels)) {
+        left.labels <- colnames(segs)
+        if (is.null(left.labels)) 
+            left.labels <- paste("V", seg.order, sep = "")
+    }
+    else left.labels <- left.labels[seg.order]
+    plot.limits <- par("usr")
+    mtext(left.labels, 2, line = 0.2, at = 1:segdim[2], adj = 1, 
+        las = 1, cex = cex)
+    #if (is.null(right.labels)) 
+    #    right.labels <- paste(round(segs[1, ], 2), "(", segs[4, 
+    #        ], ")", sep = "")
+    #else 
+    right.labels <- right.labels[seg.order]
+    mtext(right.labels, 4, line = 0.2, at = 1:segdim[2], adj = 0, 
+        las = 1, cex = cex)
+    #if (is.na(xlab)) 
+    #    xlab <- paste("| -", rownames(segs)[2], "-", rownames(segs)[1], 
+    #        "-", rownames(segs)[3], "- |")
+    if (nchar(xlab)) 
+        mtext(xlab, 1, line = 2)
+    par(oldpar)
+    invisible(segs)
+}
+
+sd2 = apply(latent.srp2$sample$receiver - latent.srp2$sample$sender, 2, sd)
+latent2 = latent.srp2$mkl$receiver - latent.srp2$mkl$sender
+centipede1 = t(cbind(latent2, latent2 - 1.96*sd2, latent2 + 1.96*sd2))
+colnames(centipede1) = Cnet%v%"vertex.names"
+centipede.plot(centipede1, vgrid = c(-1,0,1,2), cex = .7, right.labels = round(latent2, 2))
+@
+
+
+\subsubsection{Visualization of Journal Rankings} \label{Visualization}
+
+Before comparing the results to the quasi-Stigler model we visualize the model output. We plot the estimated MKL positions  (Figure 1\ref{}, left), i.e. those that minimize the posterior mean of the Kullback-Leibler (KL) divergence from the position model to the true distance model. (Equivalently, they are the positions that maximize the likelihood of the posterior mean graph. For details on this choice see \citep{shortreed06}.)
+%shortreed06: heuristically, posterior mean graph is closer to the true than oberved graph due to averaging and use of prior info
+The size of the nodes is scaled to the estimated scores. The coloring of nodes is based on the hierarchical clustering of \citet{varinetal}. Although there is no clustering term in our latent space model, the estimated positions are consistent with those estimated clusters. The right of Figure \ref{?} shows a sample of 1000 draws of $z$ from the posterior distribution, visualizing the level of uncertainty in the estimated positions. The clusters that consist of only one journal, i.e. JSS and StataJ, illustrate the range of variability in the positions. In general, the clusters occupy distinct areas. 
+
+% `response` argument conveys a valued network.
+
+<<r latent_sr2_plot, eval = T, cache = T, dependson= c("setup", "latent_sr2", "setup_jrss"), echo = F, fig.height=5, fig.width=6, cache = T, warning=F, message=F, fig.cap= 'Estimated journal positions from the two-dimensional latent space model. Left: Point estimates with node size scaled to receiver minus sender coefficient. Right: Sample of positions from the model. Colouring is due to the hierarchical clustering of Varin et al. '>>=
+
+write.csv(latent.srp2$mkl$Z, file = "~/Documents/citation/latent_ranking/latent_srp2_Z.csv")
+par(mai = c(.1,.1,.1,.1))
+layout(matrix(c(1,1,1,2,2,1,1,1,2,2,1,1,1,2,2), 3, 5, byrow = TRUE), respect = T)
+
+vc2 = (latent.srp2$mkl$receiver - latent.srp2$mkl$sender)/2+1
+plot(latent.srp2, labels = T, cex=.7, label.cex=.5, what = "mkl",
+     plot.vars=F, vertex.col = cutree(journals.cluster, h = 0.6)+3, edge.col=0,
+     print.formula=F, main = NA, vertex.border = "black", vertex.lwd = .3,
+     vertex.cex = vc2, label.pos=3, suppress.axes=T,  xlab=NA, ylab=NA)
+     # view some edges, for visibility edge only ifcorresponding citation count is > 20:
+     # edge.col = as.numeric(Cnet%e%"citations">20)*8, 
+
+####  cloud/uncertainty plot  ####
+
+n = 47
+N = 1000 
+p = latent.srp2[["sample"]][["Z"]]
+m = matrix(0,0,3)
+for (i in 1:n) {
+  p1 = cbind(p[,i,][,1],p[,i,][,2], rep((cutree(journals.cluster, h = 0.6)+3)[i], N))
+  m = rbind(m,p1)
+}
+
+#null plot:
+plot.ergmm(latent.srp2, xlab = NA, ylab = NA, vertex.col=0, edge.col=0, 
+           plot.vars=F, suppress.axes=T, print.formula=F, vertex.border=0,
+           xlim = c(-4,4), ylim = c(-3,5), main = NA, pie=F)
+
+#add points
+s = sample(1:(n * N * 10))
+for (i in 1:(n * N)) {
+  points(m[s[i],1], m[s[i],2], col = m[s[i],3], pch=".")
+}
+
+legend("topleft", col = 4:11, pch = 16, legend=c("review", "general", "theory/method", "appl./health", "computational","eco./envir.", "JSS", "StataJ"), cex=.8, box.col=0)
+
+@
+
+The citation network is too dense to display network edges in a static plot. However, using the \pkg{visNetwork} package we create a dynamic plot of the citation network to explore how influence travels through it. \textbf{Dynamic plot won't render in the PDF. See attached citation\_net.html for now, and I'll ultimately link plot as html or shiny.}
+%http://www.showmeshiny.com/hungarian-interbank-lending/
+%https://daroczig.shinyapps.io/rinfinance_Berlinger-Daroczi-demo/
+
+The edges in the dynamic visualization are thinned to include only those that account for at least three percent of a journal's out-citations. Rankings based on the latent space model scores are reported next to the journal titles in the drop-down menu and the hover-text.
+
+
+<<r latent_sr2_interactive, eval = F, results = 'hide', dependson= c("setup", "latent_sr2", "setup_jrss", "latent2_stigler"), fig.keep='last', echo = F, fig.height=5, fig.width=6, cache = T, warning=F, message=F>>=
+
+# setup ####
+
+library(visNetwork)
+library(igraph)
+insertSource("~/Documents/citation/latent_ranking/visIgraph.R",
+             package = "visNetwork", functions = "visIgraph")
+insertSource("~/Documents/citation/latent_ranking/visIgraphLayout.R",
+             package = "visNetwork", functions = "visIgraphLayout")
+
+
+# data ####
+nodes <- data.frame(id = 1:47, 
+                    label = Cnet%v%"vertex.names",
+                    #title = Cnet%v%"vertex.names", #for selection dropdown
+                    title = paste(Cnet%v%"vertex.names", 48 - srs2b[,1]), #for tooltip
+                    value = vc2, #conveys node size, on a scale from 0-1
+                    color.highlight.background = "red",
+                    group = rep((cutree(journals.cluster, h = 0.6))))
+
+
+edges <- data.frame(from=data.frame(as.edgelist(Cnet))$X1, 
+                    to=data.frame(as.edgelist(Cnet))$X2)
+                    #value = Cnet%e%'citations'
+
+cite_igraph <- graph.data.frame(edges, directed=TRUE, vertices=nodes)
+Z = as.matrix(read.csv("~/Documents/citation/latent_ranking/latent_srp2_Z.csv")[,2:3])
+
+#fewer edges
+# Cmatrix.norm = t(Cmatrix)/citing #entries are % of i's citations to j (column); rows sum to 1; 'citing' is total out for each journal
+strength = .03 #only include "strong receivers", i.e. receiver accounts for >.05 = 5% of sender's citations sent [different form the plot in `compare_clustered`]
+#interesting plot with strength = .1 (100 edges remain)  
+Cstrong = t(Cmatrix)
+Cstrong[Cmatrix.norm<strength] = 0
+#rowSums(Cstrong>0)
+Cnet_strong = as.network(Cstrong, directed=T, matrix.type="a", ignore.eval=F,  names.eval="citations")
+
+edges2 <- data.frame(from=data.frame(as.edgelist(Cnet_strong))$X1, 
+                    to=data.frame(as.edgelist(Cnet_strong))$X2,
+                    value = Cnet_strong%e%'citations')
+
+cite_igraph <- graph.data.frame(edges2, directed=TRUE, vertices=nodes)
+
+# dynamic plot (needs a title?) ####
+
+visIgraph(cite_igraph, idToLabel = FALSE, type = "full") %>%
+  visIgraphLayout(cite_igraph, layout = "layout.norm",
+                  layout.norm = Z, type = "full") %>%
+  #visOptions(highlightNearest = list(enabled =TRUE, degree = 1)) %>%
+  visNodes(#color = list(highlight = list(background = "green")), #not working as expected
+           shape = "dot", #shape = "text"
+           scaling = list(min = 3, max = 15),
+           labelHighlightBold = TRUE,
+           font= list(size = 20, color = "black", strokeWidth = 1)) %>%
+  visEdges(shadow = FALSE,
+           #width = 1, to use width turn edge value off
+           scaling = list(min = 1, max = 8),
+           selectionWidth = "function(x) {Cnet_strong%e%'citations';}",
+           #scaling = list(min = 1, max = 10),
+           #arrows = list(to = list(enabled = FALSE, scaleFactor = 1),
+           #            from = list(enabled = FALSE, scaleFactor = 1)),
+           arrows = list(to = list(enabled = FALSE, scaleFactor = 3),
+                         middle = list(enabled = TRUE, scaleFactor = .6)),
+           color = list(highlight = "red", opacity = .2), #, color = "white"
+           hidden = F,
+           smooth = list(type = "curvedCW")) %>%
+  visOptions(highlightNearest = list(enabled = TRUE, degree = 0.5), #hover = TRUE doesn't work?
+             nodesIdSelection = FALSE, 
+             selectedBy = "title")
+@
+
+
+
+\subsubsection{Comparison of Latent Space and Quasi-Stigler Model Output}\label{Comparison1}
+
+<<r latent2_stigler, eval = T, echo = F, cache = T, warning = F, message = F, fig.height = 5, results = 'hide', dependson= c("setup", "latent_sr2"), fig.cap = "Compared ranking output of the latent space and quasi-Stigler models. (NB: In this plot only, rank is on a reverse scale of low to high.) Abbreviated journal names are colored black if their ranking is higher under the latent space model and red otherwise" >>=
+
+# compare scores -> moved to appendix####
+# plot(x = scale(fit.table2$quasi), y = scale(latent.srp2$mkl$receiver - latent.srp2$mkl$sender),
+# main = "Score Comparison", cex.main = .8,
+# xlab = "quasi-Stigler", ylab = "2-D latent space", type = "n", ylim = c(-2,3.2))
+# text(labels = Cnet%v%"vertex.names", x = scale(fit.table2$quasi), y = scale(latent.srp2$mkl$receiver - latent.srp2$mkl$sender),
+#     cex = .6, srt = -50, col = (scale(latent.srp2$mkl$receiver - latent.srp2$mkl$sender) < scale(fit.table2$quasi)) +1)
+
+# compare ranks ####
+
+srs2 = round(cbind(fit.table2$quasi, latent.srp2$mkl$receiver - latent.srp2$mkl$sende),2)
+rownames(srs2) = Cnet%v%"vertex.names"
+srs2b = srs2
+srs2b[,1] = rank(srs2b[,1])
+srs2b[,2] = rank(srs2b[,2])
+srdiff = srs2b[,1]-srs2b[,2]; #latent space - stigler.
+
+## plot rank comparison ####
+
+plot(srs2b, pch = NA, ylab = "2D Latent Space Model", xlab = "quasi-Stigler", main = "Rank Comparison", cex.main = .8)
+text(srs2b, rownames(srs2b), cex = .5, col = (srs2b[,1]>srs2b[,2]) +1, srt = -45)
+abline(0,1, lty=2, col="grey")
+
+@
+
+Finally, we compare the scores and corresponding rankings of journals from the quasi-Stigler and latent space models. Figure \ref{?} plots the compared ranks. Although plotting by rank inflates the differences between journals, especially near the middle of the pack, the ranks are more easily interpretable than the scores and provide better spacing in the visualization. For comparison, the analogous plot using scores is included as Appendix Figure \ref{}. 
+
+The two methods' output is very similar overall. Almost all journals are within three ranking points between the two models, and because many journals in the middle of the rankings have very close scores, as shown in Figure \ref{?}, some of these differences are only due to variance. We can use the interactive plot to explore some of the larger differences. We consider Bernoulli (Bern) ranked higher under the quasi-Stigler model, and Statistics in Medicine (StMed) ranked higher by the latent space model. Most of the edges into Bernoulli are from journals relatively close to it in the plot, while those out are a little bit further, though generally still on its ``side'' of the plot. In contrast, StMed pulls from all over the plot but points to journals within its half. This explains why StMed comes out higher in the latent space ranking and Bernoulli is lower. The model captures the broadness of intellectual influence that is a meaningful factor in a journal's importance. 
+
+%\section{Data Expansion}
+%- \citet{varinetal} Data comes from 2010 Web of Science published by Thomson Reuters. Want to expand to include all of Statistics and Probability (?) and Mathematics, Applied ( 253 journals) and Agricultural, Economics and Policy (? 17 journals) 
+%Note JCR can give related journals, e.g.  http://admin-apps.webofknowledge.com/JCR/JCR?RQ=RELATED_JOURNALS&rank=6&journal=CAN+J+AGR+ECON&query_new=true, and this could be another use of the network model
+
+Although we will not explore it here, another advantage of the using the latent space model via \pkg{latentnet} is extensibility. In particular, for less homogeneous data we can fit meaningful covariates and cluster assignments \citep{krivitskyetal09}. Unlike the quasi-Stigler model, this allows us to extend our ranking to journals from multiple disciplines, or sharpen our interpretation of the given data set to account for sub-genres within statistics. This capability (without the use of added covariates) will be explored in the next example.
+
+\subsection{Movie Ratings}\label{Example2}
+
+%See full code in movie_example.R
+
+%1M Benchmark Data Set
+%http://files.grouplens.org/datasets/movielens/ml-1m-README.txt
+%Permalink: http://grouplens.org/datasets/movielens/1m/
+
+In this example we model data from the MovieLens data set \citep{movielens}. This data was collected by the GroupLens Research Project at the University of Minnesota. It consists of about one million ratings of 3952 movies from approximately 6000 users who joined MovieLens in 2000. The data was released in 2003. Ratings are on a one to five integer scale with five being the best. Each user included has supplied at least 20 ratings.
+
+To convert the data into a network format we aggregate differences in individual users' sets of ratings. We form a $3952 \times 3952$ ratings-difference matrix in which entry $i, j$ represents the total positive difference in ratings of movie $j$ minus ratings of movie $i$ by users who have reviewed both movies. If a user prefers $i$ to $j$ the difference is added to entry $j, i$.
+%The corresponding network is valued and directed. 
+%if i < j by 1 then i,j = 1 (i "sends" a point to j)
+
+When using average ratings to rank movies, bias originates from the facts that users do not choose movies to rate randomly, and may skew high or low in their ratings. Differences in an individual's ratings contribute information beyond the ratings alone. In addition, the volume of ratings for a film is useful, but obscured by average ratings. By amassing differences over ratings our model captures the tendency for a movie to be frequently and consistently rated above movies that draw the same audience. As above, the model output facilitates a meaningful visualization of the network of movies, from which a user can explore and compare related films. This would not be possible with a simple list of films, even one divided by genre. Using a dynamic network plot we increase the amount of data we can present.
+
+To illustrate these points without too much computational burden we consider a subset of the MovieLens data, retaining only the movies assigned genre ``Action'', ``Crime'', ``Western'', or some combination of those genres. (Only two of the possible combinations are present in the data). We remove a small number of isolates before modelling. The resulting network has 130 nodes and 11393 edges.
+
+<<r movie_data, eval = T, echo = F, cache = T>>=
+movie = readRDS("~/Documents/citation/latent_ranking/movie_output.RDS")
+movie_net_acw = movie$movie_net_acw
+movie_net_acw_full = movie$movie_net_acw_full
+vc.acw = movie$vc.acw
+latent_acw2 = movie$latent_acw2
+@
+
+<<r movie_model, eval = F, echo = T>>=
+latent_acw2= ergmm(movie_net_acw_full ~ euclidean(d=2) + rreceiver + rsender, 
+             response = "ratings_diff", family = "Poisson.log",
+             control = control.ergmm(pilot.runs = 4,  burnin = 500000, 
+             interval = 100, sample.size = 10000), seed = 123)
+@
+
+There is a strong correlation ($0.94$ unweighted and $0.975$ when weighted by the log of co-review counts) between average ratings and the ratings extrapolated from the latent space model (receiver minus sender coefficient).
+%?($x$ unweighted, $x$ when weighted by the logged counts of ratings).
+Figure \ref{?} shows this correlation, plotting the latent space scores against the average ratings and labeling points by review counts for each film. The outliers all have very low review counts, while films with the highest review counts fit closely in the linear trend. To deal with the instability of modeling films with few ratings differences within our selected genres, we can incorporate the average ratings in our model as prior means for the receiver coefficients [implementable in ergmm or only prior mean 0?]. Keeping the sender coefficients at prior mean zero, we can adjust the strength of the average rating priors by also adjusting parameters on the prior variance, potentially scaling to review counts.
+
+Given that this rating system was organized by a university and all reviewers in our data joined in 2000, there may be relatively high homogeneity in reviewers. For example, the top four occupations of the reviewers are (in decreasing order): college/grad student, other/not specified, executive/managerial and academic/educator. This is certainly not representative of the population at large. Some of the stated benefits of replacing average ratings with a scores from our difference-based network model may emerge more strongly when the reviewers are more heterogeneous. 
+
+<< movie_compare, eval = T, echo = F, results = 'hide', dependson = c("movie_data", "setup"), cache = T, message = FALSE, warning = FALSE, fig.height = 5, fig.cap= "A comparison of average ratings to latent space model scores, i.e. reciever minus sender coefficient. The plotting characters are the review counts for each film." >>=
+
+stars1 = movie_net_acw%v%"stars"
+plot(stars1, vc.acw, use = "complete.obs", type = "n",
+     main = "Ratings Compared",
+     xlab = "Average rating", ylab = "2D Latent space rating")
+text(labels = movie_net_acw%v%"counts", #paste(movie_net_acw%v%"vertex.names", 
+     stars1, vc.acw, cex = .6)
+#to see titles in plot:
+#text(labels = paste(movie_net_acw%v%"vertex.names", movie_net_acw%v%"counts"),
+ #    movie_net_acw%v%"stars", vc.acw, cex = .6, srt = -45)
+
+#check unweighted and weighted correlations
+cor(stars1 , vc.acw, use = "complete.obs") #.942
+#weighted correlation even higher
+boot:::corr(cbind((stars1 )[!is.na(stars1 )], 
+           vc.acw[!is.na(stars1 )]),
+     w = log((movie_net_acw%v%"counts")[!is.na(stars1)])) #.975
+
+@
+
+In this example, much of the value added by the latent space model comes from its corresponding visualization. The interactive plot (\textbf{attached movie\_net.html}) shows the movies as nodes colored by genre with size scaled to their model scores. The positions are those estimated from the latent space model above, \code{latent\_acw2}. For comparison, the average ratings are listed after the titles in the drop-down menu or in the label when hovering over a node. For clear visualization, the nodes are limited to displaying their seven strongest out-edges and nodes that are isolated as a result are not shown. In-degree is not limited in the plot. An edge's arrow indicates the direction from lower to higher-rated film. 
+
+<<r movie_plot, eval = F, echo = F>>=
+#stored as movie_net.html
+@
+
+The movies clearly cluster by genre even though genre was not included in the model. Even those movies with hybrid genres are placed roughly between their two component genres. However, there are a few films that reside outside their genre cluster, and in those cases the plot may highlight incomplete or incorrect classification. For example, the film ``Coogan's Bluff'' is categorized as crime by MovieLens, but its latent position is between action and western. The \textit{IMDb} entry for this film describes it as ``An Arizona deputy goes to New York City to escort a fugitive back into custody,'' and the lead role is played by action/crime/western star Clint Eastwood [cite - http://www.imdb.com/title/tt0062824/]. The latent position readily reveals this film's genre-bending between crime, action and western influences. For data that is not pre-labelled with genres, the latent space model, potentially with a cluster term added, could provide a very good set of initial labels. [Apply a cluster model and compare to ground truth?]
+
+%i checked a standard plot and it's OK but not nearly as good:
+%plot(movie_net_acw, vertex.col = as.numeric(as.factor(movie_net_acw%v%"genres")), cex = 1.3, edge.col ="grey")
+
+<< pagerank_movie, eval = F, cache = T, echo = F, results = 'hide', dependson = c("setup", "setup_jrss", "pagerank", "movie_data"), fig.keep = 'none', message = F, warning = F>>=
+
+# apply page rank ####
+
+movie.page.rank = page.rank(acw_igraph, damping = .95)$vector
+
+# compare results to other ranks ####
+
+## points in
+cor(movie.page.rank, colSums(movie_rating_acw)) #.92
+
+## to cited/citing ratio (cited is points in)
+cor(movie.page.rank, colSums(movie_rating_acw)/rowSums(movie_rating_acw)) #.958 - better when normalized
+#cor(vc.acw, colSums(movie_rating_acw)/rowSums(movie_rating_acw)) #.44
+
+## number of ratings
+cor(movie.page.rank, movie_net_acw%v%"counts") #.68
+plot(movie.page.rank, movie_net_acw%v%"counts", pch = "x")
+
+### latent ranking scores
+cor(movie.page.rank, vc.acw)
+plot(movie.page.rank, vc.acw, type = "n", ylim = c(-4,6))
+text(labels = movie_net_acw%v%"vertex.names", movie.page.rank, vc.acw, cex = .5, srt = 90)
+
+# takeaway: most page ranks extremely small (this would be good in search results)
+
+@
+
+\section{Discussion}\label{Discussion}
+
+\noindent [speed/scaling?]
+Compare results to faster variational inference as applied in VBLPCM-package (which has capacity for sender and receiver effects)?
+
+[summary]
+
+
+\begin{appendix}
+\section{Appendix: Latent Space MCMC}\label{Appendix1}
+
+We examine the d-dimensional Euclidean latent space model with random \textit{sender} and \textit{receiver} effects and an intercept. Our aim is to estimate the joint probability of the parameters introduced in Section \ref{Model}:
+
+\begin{center}
+\includegraphics[width=0.3\textwidth]{dependency_struct.pdf}
+\end{center}
+
+\begin{equation}\label{eq4}
+P(\theta = a, b, z, \beta_0, \sigma_a^2, \sigma_b^2, \sigma_z^2|Y) \propto P(Y|\theta)P(\theta).
+\end{equation}
+
+$$\prod_{i\neq j} P(y_{ij}|\beta_0, z_i, z_j, a_i, b_j)P(a, b, z, \beta_0, \sigma_a^2, \sigma_b^2, \sigma_z^2)$$
+
+\begin{equation}\label{eq5}
+\prod_{i\neq j} P(y_{ij}|\beta_0, z_i, z_j, a_i, b_j)P(a|\sigma_a^2)P(b|\sigma_b^2)P(z|\sigma_z^2)P(\beta_0)P(\sigma_a^2)P(\sigma_b^2)P(\sigma_z^2)
+\end{equation}
+
+\noindent As in Section \ref{Model} we assume $y_{ij}|\beta_0, z, a, b$ is Poisson distributed with mean parameter given by Equation \ref{eq2}. 
+\break
+
+\noindent The parameters are initialized as follows:
+
+\begin{itemize}
+\item $z^{(0)}$: The geodesic distances for all dyads are computed from the binary adjacency matrix $Y_b$. Disconnected pairs are given distances of $n$. The initial value $z^{(0)}$ is then computed by multidimensional scaling, returning optimal $d$-dimensional coordinates whose euclidean distances best approximate the geodesic distances between nodes.
+
+\item $\sigma_z^{2(0)} = var(z^{(0)})$
+
+\item $a^{(0)}: logit(\frac{rowsums(Y_b) + 1}{n - 1 + 2}) - mean(logit(\frac{rowsums(Y_b) + 1}{n - 1 + 2}))$ %n-1 is the number of possible edges on each node. the +1(num), +2(denom) is as though a^(0) is a prediction/new draw of the number of edges when edges ~ binomially with total trials n-1, observed success prob rowsums/(n-1), and with a uniform prior on the success prob (see gelman p. 36)
+
+\item $\sigma_a^{2(0)} = var(a^{(0)})$
+
+\item $b^{(0)}: logit(\frac{colsums(Y_b) + 1}{n - 1 + 2}) - mean(logit(\frac{colsums(Y_b) + 1}{n - 1 + 2}))$
+
+\item $\sigma_b^{2(0)} = var(b^{(0)})$
+
+\item $\beta_0^{2(0)} = logit(P(y_{ij} > mean(y_{ij}))) + mean(\text{distances between nodes})$ 
+
+\end{itemize}
+  
+
+\noindent Parameters are updated as follows:  
+
+[what is the ordering/grouping of parameter updates? latentnet allows for group.deltas for proposing changes to multiple parameters simultaneously. When are they updated singly vs as a group?]
+
+[how does latentnet's adaptive sampling work, e.g. how are proposal dist. parameters updated?]  
+
+\begin{itemize}
+
+\item $z$: Metropolis [if \citep{hoff02} aligns with latentnet]: 
+
+1. Propose $z^*$ from a symmetric proposal distribution, $J(z|z^{(t)})$  
+
+2. Accept $z^*$ with probability $\frac {P(Y|z^*, a^{(t)}, b^{(t)}, \beta_0^{(t)})P(z^*)} {P(Y|z^{(t)}, a^{(t)}, b^{(t)}, \beta_0^{(t)}) P(z)}$. Otherwise $z^{(t+1)} = z^{(t)}.$
+
+3. Procrustes transformation: Store $z^{(t+1)} = argmin_{Tz^*}tr(z^{(0)} - Tz^*)\top(z^{(0)} - Tz^*)$ where $T$ is the set of distance-preserving operations (rotations, reflections and translations) on $z$ \citep{hoff02}.
+
+\item $\theta\setminus z$: Metropolis-Hastings \citep{hoff03}:
+
+1. Propose $\theta^*$ from a proposal distribution, $J(\theta|\theta^{(t)})$ [individual or group?]
+
+2. Compute acceptance probability $r = min(1, \frac{P(Y|\theta^{*})P(\theta^{*})J(\theta^{(t)}|\theta^{*})}  {P(Y|\theta^{(t)})P(\theta^{(t)})J(\theta^{*}|\theta^{(t)})})$ %lots of cancellation here if only updating one parameter at a time
+
+3. Set $\theta^* = \theta^{(t+1)}$ with probability $r$, otherwise $\theta^{(t+1)} = \theta^{(t)}$
+\end{itemize}
+
+[In \citep{shortreed06} proposal distributions are Gaussian centered at current values, $\theta^{(t)}$ with some standard deviation, $\delta_{\beta}$ or $\delta_z$. Is this still true in latentnet? If so, and since these are symmetric, is all done with Metropolis?]
+
+
+<<r latent2_stigler_raw, eval = T, echo = F, cache = T, warning = F, message = F, fig.height = 5, results = 'hide', dependson= c("setup", "latent_sr2"), fig.cap = "Compared score output of the latent space and quasi-Stigler models. Abbreviated journal names are colored black if their scaled score is higher under the latent space model and red otherwise." >>=
+
+# compare scores ####
+plot(x = scale(fit.table2$quasi), y = scale(latent.srp2$mkl$receiver - latent.srp2$mkl$sender),
+main = "Score Comparison", cex.main = .8,
+xlab = "quasi-Stigler", ylab = "2D Latent Space Model", type = "n", ylim = c(-2,3.2))
+text(labels = Cnet%v%"vertex.names", x = scale(fit.table2$quasi), y = scale(latent.srp2$mkl$receiver - latent.srp2$mkl$sender),
+    cex = .6, srt = -50, col = (scale(latent.srp2$mkl$receiver - latent.srp2$mkl$sender) < scale(fit.table2$quasi)) +1)
+@
+
+\end{appendix}
+
+%defunct yelp example
+<<r yelp_viz, eval = F, cache = F, echo = F>>=
+cnet.nodes <- data.frame(id = 1:47, 
+                 title = paste("<p>", Cnet%v%"vertex.names", "<br><b>", round(vc2,2), "</b></p>"),
+                 size = 10*vc2,
+                 #tooltip
+                 color.highlight.background = "red")
+
+cnet.edges <- data.frame(from=data.frame(as.edgelist(Cnet))$X1, 
+                 to=data.frame(as.edgelist(Cnet))$X2)
+                 #width = round(pizza_net%e%"ratings_diff"/5),
+                 #color = rep(NA,length(pizza_net%e%"ratings_diff")))
+                  #weight = pizza_net%e%"ratings_diff",
+ 
+#no -1 with igraph
+# edges <- head(data.frame(from=data.frame(as.edgelist(pizza_net))$X1 - 1, 
+#                         to=data.frame(as.edgelist(pizza_net))$X2 - 1),500)
+
+#library(intergraph)
+#pizza_igraph = asIgraph(pizza_net)
+cnet_igraph <- graph.data.frame(cnet.edges, directed=TRUE, vertices=cnet.nodes)
+cnet.Z = latent.srp2$mkl$Z
+
+## plot ####
+
+#dyamic plot:
+visIgraph(cnet_igraph , idToLabel = FALSE, layout = "layout.norm", layout.norm = cnet.Z) 
+#or
+visIgraph(cnet_igraph, idToLabel = FALSE, type = "full") %>%
+  visIgraphLayout(cnet_igraph , layout = "layout.norm",
+                  layout.norm = cnet.Z, type = "full") %>%
+  #visOptions(highlightNearest = list(enabled =TRUE, degree = 1)) %>%
+  visNodes(label = " ") %>%
+  visEdges(shadow = FALSE,
+           selectionWidth = 5,
+           hidden = F,
+           arrows = list(to = list(enabled = TRUE, scaleFactor = 1),
+              from = list(enabled = TRUE, scaleFactor = 1)),
+           color = list(highlight = "blue", color = "white"))
+  #visInteraction(navigationButtons = TRUE)
+@
+
+\newpage
+
+\bibliographystyle{apacite}
+\bibliography{latent_ranking}
+
+\end{document}
