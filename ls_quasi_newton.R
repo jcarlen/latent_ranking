@@ -23,13 +23,15 @@ library(latentnet)
 library(geoR) # for divnchisq
 library(gtools) #for logit function
 
-# log-likelihood function, llik is off by a constant from: ####
-#    est is "MAP", "MLE" or "Y" for optimizing theta, theta\prior variances, graph only
+# log-likelihood function, off by a constant from: ####
+#    if est is "MAP" return l(Y|theta) + l(theta) ; if "Y" return l(Y|theta) ; if "theta" return l(theta)
+#    if object has parameter values they will be used (not including hyperparameters)
 #    family = poisson fits the normal poisson latent space model
 #    family = binomial fits a quasi-Stiglery (quasi-symmetric) type model with positions
-#    [remove? better way to do this with penalty for missing the total instread of sharp constraint (which probably can't be realized )] family = poisson.c fits a constricted poisson position model (T_ij = ~Y_ij + ~Y_ji) by fitting upper tri and letting lower tri be the remainder. Note this is odd because it doesn't demand that E(Cij) = T - E(Cji) given the parameters (positions + random effects + intercept), just that E(C_ji) is a reminder not a glm prediction. This also means the last sender param has no info.  
+#    [removed] family = poisson.c fits a constricted poisson position model (T_ij = ~Y_ij + ~Y_ji) by fitting upper tri and letting lower tri be the remainder. Note this is odd because it doesn't demand that E(Cij) = T - E(Cji) given the parameters (positions + random effects + intercept), just that E(C_ji) is a reminder not a glm prediction. This also means the last sender param has no info.  
+#              better way to do this with penalty for missing the total instread of sharp constraint (which probably can't be realized )]
 
-llik <- function(object, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
+llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
                  Z=NULL, sender.var = 10, receiver.var = 10, Z.var = 10,
                  beta.var = 9, sender.var.df = 3, receiver.var.df = 3, Z.var.df = NULL, #N = number of nodes
                  prior.sender.var = 1, prior.receiver.var = 1, prior.Z.var = NULL,
@@ -44,6 +46,11 @@ llik <- function(object, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
        if(is.null(Z.var.df)) {Z.var.df = sqrt(N)}
        if(is.null(prior.Z.var)) { prior.Z.var = N/8}
        
+       if(!is.null(object$sender.var)) sender.var = object$sender.var
+       if(!is.null(object$receiver.var)) receiver.var = object$receiver.var
+       if(!is.null(object$Z.var)) Z.var = object$Z.var
+       if(!is.null(object$beta.var)) beta.var = object$beta.var
+       
        Z_dist = as.matrix(dist(Z, upper = T))
        l_lambda = t(receiver + t(sender - Z_dist)) + beta; 
     
@@ -52,14 +59,14 @@ llik <- function(object, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
           pY = sum( Y * l_lambda - lambda)
        }
        
-       if (family == "poisson.c") {
-         lambda = exp(l_lambda); diag(lambda) = 0
-         Tmatrix = Y + t(Y); diag(Tmatrix) = 0
-         lambda[lambda > Tmatrix] = Tmatrix[lambda > Tmatrix]
-         lambda[lower.tri(lambda)] = (Tmatrix - t(lambda))[lower.tri(lambda)]
-         l_lambda = log(lambda); diag(l_lambda) = NA
-         pY = sum( Y * l_lambda - lambda, na.rm = T)
-       }
+       # if (family == "poisson.c") {
+       #   lambda = exp(l_lambda); diag(lambda) = 0
+       #   Tmatrix = Y + t(Y); diag(Tmatrix) = 0
+       #   lambda[lambda > Tmatrix] = Tmatrix[lambda > Tmatrix]
+       #   lambda[lower.tri(lambda)] = (Tmatrix - t(lambda))[lower.tri(lambda)]
+       #   l_lambda = log(lambda); diag(l_lambda) = NA
+       #   pY = sum( Y * l_lambda - lambda, na.rm = T)
+       # }
        
        if (family == "binomial") {
         lambda = inv.logit(l_lambda)
@@ -69,16 +76,18 @@ llik <- function(object, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
        
        if (est == "Y") {return(pY)}
     
-       mle = pY +
-             log(exp(-beta^2/(2*beta.var)) / sqrt(2*pi*beta.var)) +
-             sum(log(exp(-sender^2/(2*sender.var)) / sqrt(2*pi*sender.var))) + 
-             sum(log(exp(-receiver^2/(2*receiver.var)) / sqrt(2*pi*receiver.var))) +
-             sum(log(exp(-Z^2/(2*Z.var)) / sqrt(2*pi*Z.var)))
-       if (est == "MLE") {return(mle)}
-       map = mle + 
-               log(dinvchisq(sender.var, sender.var.df, prior.sender.var)) + 
-               log(dinvchisq(receiver.var, receiver.var.df, prior.receiver.var)) + 
-               log(dinvchisq(Z.var, Z.var.df, prior.Z.var))
+       ptheta = log(exp(-beta^2/(2*beta.var)) / sqrt(2*pi*beta.var)) +
+                 sum(log(exp(-sender^2/(2*sender.var)) / sqrt(2*pi*sender.var))) + 
+                 sum(log(exp(-receiver^2/(2*receiver.var)) / sqrt(2*pi*receiver.var))) +
+                 sum(log(exp(-Z^2/(2*Z.var)) / sqrt(2*pi*Z.var))) +
+                 log(dinvchisq(sender.var, sender.var.df, prior.sender.var)) + 
+                 log(dinvchisq(receiver.var, receiver.var.df, prior.receiver.var)) + 
+                 log(dinvchisq(Z.var, Z.var.df, prior.Z.var))
+       
+       if (est == "theta") {return(ptheta)}
+       
+       map = pY + ptheta # = p(Y|theta) + p(theta)
+       
        if (est == "MAP") {return(map)}
 
 }
@@ -98,7 +107,8 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                  sigma2_a = 10, sigma2_b = 10, sigma2_z = 10,
                  stepsize.init.a = 1, stepsize.init.b = 1, 
                  stepsize.init.B = 1, stepsize.init.z = 1,
-                 noSelfEdges = 1) {
+                 noSelfEdges = 1,
+                 jmax = 50, epsilon = 1e-10) {
     
     r = 0
     maxllik = 0
@@ -179,7 +189,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
           for (d in sample(D)) {
             
                 j = 0
-                while(abs(diff_z[d,i]) > tol && j <= 50) { #
+                while(abs(diff_z[d,i]) > tol && j <= jmax) { #
                 br = FALSE
                 
                 #consider a new zid:
@@ -206,7 +216,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                    z[d,i] = s[which.max(sign(tmpdiff)!=zsign[d,i])]
                    #Z[i,d] = z[d,i]
                    stepsize.z[d,i] = stepsize.z[d,i]/10
-                   if (stepsize.z[d,i] < 1e-10) {br = TRUE}
+                   if (stepsize.z[d,i] < epsilon) {br = TRUE}
                    diff_z[d,i] = tmpdiff[which.max(sign(tmpdiff)!=zsign[d,i])]
                    zsign[d,i] = sign(diff_z[d,i]) 
                       znew_i = z[,i]
@@ -365,7 +375,8 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
     sigma2_b = (sum(b^2) + v_b*s2_b^2) / (N + 2 + v_b)
     
     # likelihood ####
-    currentllik = llik(Y=Y, sender = a, receiver = b, beta = B, Z = t(z), sender.var = sigma2_a, receiver.var = sigma2_b, Z.var = sigma2_z, beta.var = sigma2_B)
+    currentllik = llik(Y=Y, sender = a, receiver = b, beta = B, Z = t(z), sender.var = sigma2_a,
+                       receiver.var = sigma2_b, Z.var = sigma2_z, beta.var = sigma2_B)
     print(currentllik)
     if (currentllik  > maxllik) {
         maxllik = currentllik
@@ -397,10 +408,36 @@ predict.lsqn <-function(model, type = "MAP", names = NULL) {
   if (type == "MAP") return(lambda) else {
     if (type == "rpois") {
       if (!is.null(names)) {row.names(lamdda) = names}
-      return( matrix(rpois(N^2, lambda), N, N))
+        return(matrix(rpois(N^2, lambda), N, N))
     }
       
   }
   
 }
 
+
+#BIC estimation? ####
+samp1 = rep(0,1000)
+N = 47
+for (i in 1:length(samp1)) {
+    sender.var = rinvchisq(1, sender.var.df, prior.sender.var)
+    receiver.var = rinvchisq(1, receiver.var.df, prior.receiver.var)
+    Z.var = rinvchisq(1, sqrt(N), N/8)
+  object = list(
+    beta = rnorm(1, 0, sd = sqrt(beta.var)),
+    sender = rnorm(N, 0, sqrt(sender.var)),
+    receiver = rnorm(N, 0, sqrt(receiver.var)),
+    Z = matrix(rnorm(N*d, 0, sqrt(Z.var)), nrow = N, ncol = d)
+  )
+  samp1[i] = llik(object, Y, est = "Y")
+}
+
+#DIC estimation? ####
+
+-2* ((mean(latent.srp0$sample$lpY) + lgamma.constant) -
+       llik(latent.srp0$mkl, Z = matrix(0, 47, 2), Y, est = "Y"))
+       #(latnet.srp0$mcmc.mle$lpY + lgamma.constant)
+
+-2* ((mean(latent.srp2$sample$lpY) + lgamma.constant) -
+       llik(latent.srp2$mkl, Y, est = "Y"))
+       #(latnet.srp2$mcmc.mle$lpY + lgamma.constant)
