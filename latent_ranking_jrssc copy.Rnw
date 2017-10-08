@@ -124,8 +124,8 @@ E(y_{ij}) = g^{-1}(\eta_{ij} = \beta' x_{ij} - \lVert z_i - z_j \rVert + a_i + b
 
 \noindent where $g$ is the GLM link function. In the context of our applications, we assume $y_{ij}$ is Poisson distributed and let $g$ be the standard log link function. In some cases other distributions may be more appropriate, but here we use the Poisson because we are dealing with count data. (A binomial model with constant trials and a Bernoulli model for binary networks can also be implemented in \pkg{latentnet}.) This is in contrast to the binomial distributions of edge weights in the quasi-Stigler model described in Section~\ref{QS}. Unlike the quasi-Stigler model the estimates are not conditioned on the total weight of each dyad ($y_{ij} + y_{ji}$). 
 
-% latentnet doesn't allow for a unique number of trials in a binomial distribution on each node, but I may code that and use it in an example. Pavel said he would add it in the package if I do.
-% Can also use optim to get a quick estimate with binomial likelihood.
+% latentnet doesn't allow for a unique number of trials in a binomial distribution on each node, but I may code that eventually and add to latentnet. Wouldn't fix dyad totals like quasi-Stigler though, so the interpretation wouldn't exactly make sense in context.
+% Could also use optim to get a quick estimate with binomial likelihood.
 
 We note some features of the model:
 
@@ -212,7 +212,7 @@ Both estimation methods described below require us to supply or generate initial
 \emph{MCMC Initialization}:
 
 \begin{itemize}
-\item $z^{(0)}$: The positions are initialized through either multidimensional scaling or normal draws. In the former, the geodesic distances for all dyads are computed from the binary adjacency matrix $Y_b$. Disconnected pairs are given distances of $n$. The initial value $z^{(0)}$ is then computed by multidimensional scaling, returning optimal $d$-dimensional coordinates whose Euclidean distances best approximate the geodesic distances between nodes. In the latter, $z^{(0)}$ is generated via independent draws from a normal distribution. \citet{hoff02} note that the choice of initialization does not impact their results. 
+\item $z^{(0)}$: The positions are initialized through either multidimensional scaling (MDS) or normal draws. In the former, the geodesic distances for all dyads are computed from the binary adjacency matrix $Y_b$. Disconnected pairs are given distances of $n$. The initial value $z^{(0)}$ is then computed by multidimensional scaling, returning optimal $d$-dimensional coordinates whose Euclidean distances best approximate the geodesic distances between nodes. In the latter, $z^{(0)}$ is generated via independent draws from a normal distribution. \citet{hoff02} note that the choice of initialization does not impact their results. 
 
 \item $\displaystyle \sigma_z^{2(0)} = var(z^{(0)})$
 
@@ -245,7 +245,7 @@ The initial intercept is composed of an ``edge intercept,'' a valued-network ana
 \emph{Quasi-Netwon Initialization}:
 
 \begin{itemize}
-\item $z^{(0)}$: Standard normal draws by default, or multidimensional scaling as for MCMC estimation.
+\item $z^{(0)}$: Standard normal draws by default, or multidimensional scaling as for MCMC estimation. IF MDS, the positions are scaled so that the maximum coordinate size is one, which has shown to improve performance. %As long as positions are scaled, doesn't seem senstive to which of these is chosen
 
 \item $\displaystyle a^{(0)}, b^{(0)}$: Standard normal draws.
 
@@ -558,18 +558,16 @@ fit.table2 = fit.table[order(match(rownames(fit.table),Cnet%v%"vertex.names")),]
 
 << llik_and_latent_qn, cache = T, echo = F, results='hide', warning = F, message = F, dependson = c("setup_jrss", "latent_sr2_plot")>>=
 
-#source necessary functions and adding some other helpful things:
-
+#source necessary functions and add some other helpful things:
 source("./latent_ranking_repo/ls_quasi_newton.R")
+# contains, llik, log-likelihood function, off by a constant: 
+# contains lsqn, the latent space quasi-netwon function
 
 # helper function
 dist2 <- function(Z) {
   as.matrix(dist(Z, upper = T))
 }
 
-
-# contains, llik, log-likelihood function, off by a constant: 
-# contains lsqn, the latent space quasi-netwon function
 @
 
 In the next section we apply latent space rating to rank a set of statistics journals. We evaluate the output and compare it to existing journal-ranking methods.
@@ -781,7 +779,7 @@ To connect the Quasi-Stigler model to the latent space model, consider the quasi
 
 \subsection{Comparison of Journal Rankings} \label{Comparison}
 
-We compare the output of our latent space model in two dimensions to the quasi-Stigler model and others discussed in Section \ref{Introduction}. The \proglang {R} code used to implement our model is included in the supplementary material. After considering several estimates, we present MKL parameter estimates from MCMC estimation with random initilization. These estimates have the highest posterior probability and produce the same rankings as the best MLE estimate. We compared results with three-dimensional positions but found no significant advantage to the three-dimensional model to justify the additional parameters and more cumbersome visualization.
+We compare the output of our latent space model in two dimensions to the quasi-Stigler model and others discussed in Section \ref{Introduction}. The \proglang {R} code used to implement our model is included in the supplementary material. After considering several estimates, we present MKL parameter estimates from MCMC estimation with random initilization. These estimates have the highest posterior probability and slightly higher graph probability than even the MLE estimate. We compared results with three-dimensional positions but found no significant advantage to the three-dimensional model to justify the additional parameters and more cumbersome visualization. In the case that the data and application do not make the choice of dimension clear, \citet{BICM} derive an analog to the BIC and AIC they they apply to dimension selection for latent space models.
 
 %%%%%%%%%%%%%%%%%%%
 % CITATION MODELS %
@@ -802,8 +800,9 @@ t1.srp2 = Sys.time()
 latent.srp2 = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
                     response = "citations", family = "Poisson.log", seed = 30,
                     tofit = c("mcmc", "mkl", "procrustes", "mle"),
-                    control = ergmm.control(burnin = 3000000, interval = 500,
-                                            sample.size = 5000, mle.maxit = 100))
+                    control = ergmm.control(burnin = 500000, interval = 500,
+                                            sample.size = 5000, mle.maxit = 100,
+                                            pilot.runs = 10))
 t2.srp2 = Sys.time()
 # The \code{euclidean(d=2)} argument indicates that the latent positions are two-dimensional.
 # reponse argument conveys a valued network 
@@ -820,7 +819,7 @@ t2.srp2 = Sys.time()
 set.seed(3)
 
 t1 = Sys.time()
-latent_qn = lsqn(t(Cmatrix), runs = 100, tol = .01)
+latent_qn = lsqn(t(Cmatrix), runs = 50, tol = .01, Z.init = "rnorm")
     #best results with these settings ^
     #better to do more initializations with fewer runs than vice versa
 t2 = Sys.time()
@@ -842,7 +841,7 @@ latent.srp2.init.qn = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
 t2.init.qn = Sys.time()
 @
 
-<< latent_sr2_init_r, eval = T, results = 'hide', echo = F, cache = T, cache.comments = FALSE, warning= FALSE, dependson = c("llik_and_latent_qn")>>=
+<< latent_sr2_init_r, eval = T, results = 'hide', echo = F, cache = T, cache.comments = FALSE, warning= FALSE>>=
 
 #random initation of sender and receiver, and scaling Z helps the model fit
 D = 2; N = nrow(Cmatrix)
@@ -857,7 +856,8 @@ latent.srp2.init.r = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
                                 response = "citations", family = "Poisson.log", seed = 30,
                                 tofit = c("mcmc", "mkl", "procrustes", "mle"),
                                 control = ergmm.control(burnin = 500000, interval = 500,
-                                                        sample.size = 5000, mle.maxit = 100),
+                                                        sample.size = 5000, mle.maxit = 100,
+                                                        pilot.runs = 10),
                                 user.start = list(Z = Z, sender = a, receiver = b, beta = 0,
                                                   sender.var = var(a), receiver.var = var(b),
                                                   Z.var = var(as.vector(Z))))
@@ -1190,7 +1190,7 @@ summary_xtable_rank <- xtable(summarytable_rank, caption = "Compared Rankings", 
    
 summary_xtable_rate <-xtable(round(cor(summarytable_rate),2), caption = "Correlation Table of Journal Ratings Methods", label = "correlation_table")
 
-col1 <- rep("\\rowcolor[gray]{0.95}", 4)
+col1 <- rep("\\rowcolor[gray]{0.9}", 4)
 print.xtable(summary_xtable_rank, booktabs = TRUE,
              table.placement = getOption("xtable.table.placement", "!"),
              add.to.row = list(pos = as.list(c(2, 7, 25, 18)), command = col1))
@@ -1200,9 +1200,9 @@ print.xtable(summary_xtable_rate)
 
 Table \ref{summarytable_rank} compares journal rankings from the latent space model, quasi-Stigler model, PageRank, Eigenfactor, Article Influence, and Impact Factor.
 %Explain how I fit all these/whether the data's from. Include code for latent space model?
-Comparisons to other versions of the Impact Factor can be found in Table 4 of \citeauthor{varinetal} for a slightly different data set. Table \ref{summarytable_rank} presents ranks rather than ratings to facilitate comparisons across the methods. According to \citet{varinetal}, there is ``diffuse opinion'' among statisticians that the most prestigious statistics journals are, in alphabetical order, \textit{Annals of Statistics, Biometrika,} the \textit{Journal of the American Statistical Association} and the \textit{Journal of the Royal Statistical Society}, Series B. Accordingly, they argue that a good rating method will put them near the top. These ``big four'' are the gray lines in Table \ref{summarytable_rank}.
+Comparisons to other versions of the Impact Factor can be found in Table 4 of \citeauthor{varinetal} for a slightly different data set. Table \ref{summarytable_rank} presents ranks rather than ratings to facilitate comparisons across the methods. According to \citet{varinetal}, there is ``diffuse opinion'' among statisticians that the most prestigious statistics journals are, in alphabetical order, \textit{Annals of Statistics, Biometrika,} the \textit{Journal of the American Statistical Association} and the \textit{Journal of the Royal Statistical Society}, Series B. (These journals have gray background in Table \ref{summarytable_rank}.) Accordingly, they argue that a good rating method will put them near the top.
 
-We find that PageRank depends heavily on a journal's pattern of out-citations. Although it ranks the ``big four'' journals at the top, it places \textit{Statistics in Medicine} (StMed), \textit{Journal of Statistical Planning and Inference} (JSPI), and \textit{Computational Statistics and Data Analysis} (CSDA) in positions six through eight, though they are ranked lowely by most other methods. These journals have the three highest out-citation counts in our data, and are among the most prolific citers of the top four journals. However, their ratios of in- to out-citations rank 20th, 30th, and 35th. Eigenfactor behaves similarly, with some differences reflecting its use of normalized data. (Eigenfactor is strongly correlated with PageRank, $0.91$, as shown in Table \ref{correlation_table}.) These results affirm PageRank and Eigenfactor as better measures of centrality or activity than importance, influence or prestige.
+We find that PageRank and Eigenfactor are better measures of centrality or activity than importance, influence or prestige because they depend heavily on a journal's pattern of out-citations. Although PageRank ranks the ``big four'' journals at the top, it places \textit{Statistics in Medicine} (StMed), \textit{Journal of Statistical Planning and Inference} (JSPI), and \textit{Computational Statistics and Data Analysis} (CSDA) in positions six through eight, though they are ranked lowely by most other methods. These journals have the three highest out-citation counts in our data, and are among the most prolific citers of the top four journals. However, their ratios of in- to out-citations rank 20th, 30th, and 35th. Eigenfactor behaves similarly, with some differences reflecting its use of normalized data. (Eigenfactor is strongly correlated with PageRank, $0.91$, as shown in Table \ref{correlation_table}.) 
 
 Impact Factor ranks some journals much higher than all other methods, reflecting its valuation of influence outside statistics. For example, the \textit{Journal of Statistical Software} (JSS) ranks 4th and \textit{Environmental and Ecological Statistics} (EES) ranks 14th, though it has the second-lowest in-citations in our data. On the other hand, the ``big four'' journals Bka and JASA are ranked 11th and 8th. The Impact Factor ratings are most strongly correlated with Article Influence ($0.87$, see Table \ref{correlation_table}). The similarity is somewhat surprising given the different methodology to arrive at the two ratings, but not unfounded. Both are normalized by articles per journal and are calculated using all citations, not just ones from the $47$ journals in our data set.  %I checked and pagerank calculated on normalized data and just the 47 jounals is pretty similar to Eigenfactor.
 They share some seemingly anomalous rankings, such as \textit{Statistical Science} placing 2nd and 6th respectively. We can consider whether a high ranking for \textit{Statistical Science} is desirable. The journal's founding editor stated that a central goal of the journal is ``presenting the full range of contemporary statistical thought at a modest technical level accessible to the wide community of practitioners, teachers, researchers and students of statistics and probability'' \citep{degroot86}. As a review journal, it is well connected to top journals (confirmed by PageRank and Eigenfactor ranking it 13th), and it has relatively few articles which boosts its ranking when normalizing by article count. However, it is not likely to publish cutting-edge research, and its in-citation to out-citation ratio ranks 24th in our data. This suggests that it should not score so highly in a ranking of academic importance or influence. The visualizations provided by the latent space model help to further explain the position of \textit{Statistical Science} which will be revisited below.
@@ -1255,6 +1255,7 @@ cowplot::plot_grid(rc, sc)
 @
 
 <<r latent2_joy, eval = T, echo = F, cache = T, warning = F, message = F, fig.pos='t!', fig.height = 7, fig.cap = 'Posterior distributions of latent space score. Most small differences in ratings are not signficiant.'>>=
+
 library(ggplot2)
 library(ggjoy)
 
@@ -1549,7 +1550,7 @@ legend("bottomright", legend = c("SE", "LS"), col = c(2, 1), pch = 16)
 \subsection{Visualization of Latent Space Journal Rankings} \label{Visualization}
 
 Figure \ref{fig:r latent_sr2_plot} (top) shows estimated MKL positions, as described in Section \ref{MCMC}. (For more details on this choice see \citet{shortreed06}.) %shortreed06: heuristically, posterior mean graph is closer to the true than oberved graph due to averaging and use of prior info.
-The size of the nodes is scaled to the estimated scores. The coloring and cluster labels for the nodes in both panels of Figure \ref{fig:r latent_sr2_plot} are based on the hierarchical clustering of \citet{varinetal}. Although there is no clustering term in our latent space model, the estimated positions are consistent with these clusters. (Some labels are difficult to read, but this is addressed by the dynamic plot referenced below.) The bottom panel of Figure \ref{fig:r latent_sr2_plot} shows a sample of 1000 posterior draws of positions, visualizing the uncertainty in the estimated positions. Although individual journal positions are variable, the clusters occupy discernible areas. The plot shows how they fit together and provides more information than discrete labels. For example the \textit{Journal of Biopharmaceutical Statistics} is most deeply embedded in the applied/health cluster, while \textit{Statistical Science} is on the border and in fact should be classified with the review journals it lies near. (We the use of latent space visualization to identify mislabeled classes in Section \ref{Example2}.) The irregular shapes of the clusters caution against applying the latent space clustering model of \citet{handcock07}, in which positions given clusters have spherical Gaussian distributions. 
+The size of the nodes is scaled to the estimated scores. The coloring and cluster labels for the nodes in both panels of Figure \ref{fig:r latent_sr2_plot} are based on the hierarchical clustering of \citet{varinetal}. Although there is no clustering term in our latent space model, the estimated positions are consistent with these clusters. (Some labels are difficult to read, but this is addressed by the dynamic plot referenced below.) The bottom panel of Figure \ref{fig:r latent_sr2_plot} shows a sample of 1000 posterior draws of positions, visualizing the uncertainty in the estimated positions. Although individual journal positions are variable, the clusters occupy discernible areas. The plot shows how they fit together and provides more information than discrete labels. For example the \textit{Journal of Biopharmaceutical Statistics} is most deeply embedded in the applied/health cluster, while \textit{Statistical Science} is on the border and in fact should be classified with the review journals it lies near. (We the use of latent space visualization to identify mislabeled classes in Section \ref{Example2}.)  Broadly speaking, as we move from left to right we go from general journals to specific application areas. The computational journals are towards the top, and the theoretical cluster is the most centrally located. The irregular shapes of the clusters caution against applying the latent space clustering model of \citet{handcock07}, in which positions given clusters have spherical Gaussian distributions.
 
 <<r latent_sr2_plot, eval = T, cache = T, dependson= c("setup", "setup2", "latent_sr2", "setup_jrss"), echo = F, fig.width = 6, cache = T, warning=F, message=F, fig.cap= 'Estimated journal positions from the two-dimensional latent space model. Top: Point estimates with node size scaled to receiver minus sender coefficient. Bottom: Sample of positions from the model. Colouring is due to the hierarchical clustering of Varin et al. '>>=
 
@@ -1687,13 +1688,6 @@ Now we revisit the rankings of journals discussed in Secton \ref{Comparison}. Th
 
 The latent space and quasi-Stigler models produce roughly equivalent journal rankings, but how well do they model the observed network? We consider several elements of the fit of our latent space model, especially as they compare to the quasi-Stigler model.
 
-Figure \ref{fig:residuals} (left) displays sorted residuals on the scale of observed counts based on point estimates from the two-dimensinal latent space model, a Poisson sender-receiver model with no latent positions (D = 0), and the quasi-Stigler model. The quasi-Stigler model has the smallest residuals overall, which we expect since the model is constrained by dyad totals. The two-dimensional latent position model is a clear improvement on the same model without positions. The right plot of Figure \ref{fig:residuals} orders residuals by weight of the underlying edge. The $D=0$ model is systematically biased, as edges with lower citation counts are more likely to be underestimated, and heavier edges more likely to be underestimated. This pattern is slighly evident in the other two models, though much less severe.
-
-Examining the underestimated edges with high edge weight confirms that they represent atypically strong connections between two journals, far more than they typically cite or are cited. This may be a result of the long tail distribution of citation counts, with a few papers that are relevant to specific journal sub-fields driving these values up, though we do not have access to the itemized counts to verify this. In addition, the model does not control for the fact that different sub-fields cite more heavily than others. %https://www.timeshighereducation.com/news/citation-averages-2000-2010-by-fields-and-years/415643.article
-For example, the average computational journal as categorized by \citet{varinetal} has 419 out-citation in the network while the average ecological journal has only 115. A covariate could be added to the model to augment the expected counts within or between subfields. The value of journals that cite heavily outside of statistics, such as the Stata Journal which cites many economic journals, could also be downweighted. Alternately, if data for related fields such as economics and applied math becomes available (which it is not yet), we could employ such a covariate strategy between fields, or the clustering model of \citet{handcock07} if the network structure allows.  % In the next application we fit a latent space model to movie data that spans genres and different levels of connectivity.
-
-% dimension choice? - mention consideration by other authors?
-
 <<residuals, eval = T, cache = T, message =F, warning = F, results = 'hide', echo = F, dependson = c("glm"), fig.height = 4, fig.cap = 'Comparison of model residuals. Left: Residuals are ordered by size and only the range from -25 to 25 is shown to enhance detail. Right: Residuals ordered by weight of the corresponding edge.', fig.pos = 'H'>>=
 
 # g1 (quasi stigler, or quassibinomial glm) ####
@@ -1771,6 +1765,25 @@ res_vs_edge = ggplot(R, aes(x = edgeweight, y = residual, color = model)) +
 cowplot::plot_grid(res_vs_index, res_vs_edge, rel_widths = c(.75,1))
 @
 
+Figure \ref{fig:residuals} (left) displays sorted residuals on the scale of observed counts based on point estimates from the two-dimensinal latent space model, a Poisson sender-receiver model with no latent positions (D = 0), and the quasi-Stigler model. The quasi-Stigler model has the smallest residuals overall, which we expect since the model is constrained by dyad totals. The two-dimensional latent position model is a clear improvement on the same model without positions. As a summary measure, the expected posterior deviance, $E_{\theta|Y_{obs}}[-2log(P(Y_{obs}|\theta))]$, which we estimate by averaging over the MCMC sample,ln drops to $-58766$ from $-52912$. The right plot of Figure \ref{fig:residuals} orders residuals by weight of the underlying edge. The $D=0$ model is systematically biased, as edges with lower citation counts are more likely to be underestimated, and heavier edges more likely to be underestimated. This pattern is slighly evident in the other two models, though much less severe.
+
+<<latent_deviance, eval = T, cache = T, echo = F,  message = F>>=
+lgamma.constant = sum(lgamma(as.vector(Cmatrix+1)))
+# Expected deviance 
+ED0 = mean(-2*(latent.srp0$sample$lpY + lgamma.constant))
+ED2 = mean(-2*(latent.srp2.init.r$sample$lpY + lgamma.constant))
+#DIC estimation ####
+pd0 = ED0 + 2*llik(latent.srp0$mkl, Z = matrix(0, 47, 2), Y = t(Cmatrix), est = "Y")
+      #(latnet.srp0$mcmc.mle$lpY + lgamma.constant)
+pd2 = ED2 + 2*llik(latent.srp2.init.r$mkl, Y = t(Cmatrix), est = "Y")
+      #(latnet.srp2$mcmc.mle$lpY + lgamma.constant)
+DIC0 = pd0 + ED0
+DIC2 = pd2 + ED2
+@
+
+Examining the underestimated edges with high edge weight confirms that they represent atypically strong connections between two journals, far more than they typically cite or are cited. This may be a result of the long tail distribution of citation counts, with a few papers that are relevant to specific journal sub-fields driving these values up, though we do not have access to the itemized counts to verify this. In addition, the model does not control for the fact that different sub-fields cite more heavily than others. %https://www.timeshighereducation.com/news/citation-averages-2000-2010-by-fields-and-years/415643.article
+For example, the average computational journal as categorized by \citet{varinetal} has 419 out-citation in the network while the average ecological journal has only 115. A covariate could be added to the model to augment the expected counts within or between subfields. The value of journals that cite heavily outside of statistics, such as the Stata Journal which cites many economic journals, could also be downweighted. Alternately, if data for related fields such as economics and applied math becomes available (which it is not yet), we could employ such a covariate strategy between fields, or the clustering model of \citet{handcock07} if the network structure allows.  % In the next application we fit a latent space model to movie data that spans genres and different levels of connectivity.
+
 <<residuals2, eval = F, echo = F>>=
 library(reshape)
 Y = data.frame(t(Cmatrix))
@@ -1839,7 +1852,7 @@ $$\displaystyle reciprocity(Y) = \frac{\sum_{ij}Y_{ij}*Y_{ji}}{\sum_{ij}(\frac{Y
 
 The value is zero for a completely imbalanced network and one for a perfectly symmetrical one. The denominator controls for the influence of variation in the dyad totals. The unnormalized version removes the denominator. Figure \ref{fig:structure_reciprocity_plot} (top) shows the observed reciprocity as a vertical line and simulated reciprocity based on posterior parameter distributions for the two Poisson models (D = 0 and D = 2), and based on the point estimate for the quasi-Stigler model. To simulate networks from the quasi-Stigler model we use a beta-binomial approximation with mean and variance matching the overdispersed binomial. The left panel shows normalized reciprocity while the right panel shows unnormalized values. 
 
-The average reciprocity estimates are very similar for the two-dimensional and quasi-Stigler models. However, the variance of the two-dimensional model is slightly larger for normalized reciprocity and much larger for unnormalized (standard deviation of 13927 vs. 3628). As a result, the two-dimensional latent space model includes the observed value in its simulated range in both cases (p-values 0.003 (left) and 0.196 (right)), showing more appropriate model uncertainty. This difference is not due to the use of the posterior sample instead of a point estimate. Comparing the distribution for D = 2 shown in Figure \ref{fig:structure_reciprocity_plot} to one for draws from the MKL parameter estimates we find the variance from the point estimate to be only slightly smaller. The no-position Poisson model provides a lower estimate of normalized reciprocity since it lacks the symmetric effect of positions, but badly underestimates the unnormalized version, as it underestimates high edge values in general. 
+The average reciprocity estimates are very similar for the two-dimensional and quasi-Stigler models. However, the variance of the two-dimensional model is slightly larger for normalized reciprocity and much larger for unnormalized (standard deviation of 14081 vs. 3628). As a result, the two-dimensional latent space model includes the observed value in its simulated range in both cases (p-values 0.008 (left) and 0.209 (right)), showing more appropriate model uncertainty. Only a fraction of this difference is due to the use of the posterior sample instead of a point estimate. Figure \ref{fig:structure_reciprocity_plot2} compares the distributions for D = 2 shown in Figure \ref{fig:structure_reciprocity_plot} to one for draws from the MKL parameter estimate. The variance from the point estimate is a little bit smaller (p-values drop to 0 and 0.156). The no-position Poisson model provides a lower estimate of normalized reciprocity since it lacks the symmetric effect of positions, but badly underestimates the unnormalized version, as it underestimates high edge values in general. 
 
 <<sim_point_post, eval = F, echo = F, warning = F, message = F>>=
 
@@ -1903,6 +1916,7 @@ reciprocity = function(A, normalize = T) {
  if(normalize) {sum(A*t(A), na.rm = T)/sum(((A+t(A))/2)^2, na.rm = T)}
   else {sum(A*t(A), na.rm = T)}
 }
+
 nsim = 1000
 
 # 1. unnormalized ####
@@ -1979,13 +1993,22 @@ recplot1.norm = ggplot(rec.data, aes(x = normalized_reciprocity, fill = model)) 
   theme(legend.position = "none") +
   ggtitle("Normalized Reciprocity") + labs(x = NULL)
 
+cowplot::plot_grid(recplot1.norm, recplot1, rel_widths = c(.8, 1), nrow = 1)
+
+@
+
+<<structure_reciprocity_plot2, eval = T, echo = F, cache = T, message =F, warning = F, fig.height = 2, fig.width = 6, fig.pos = 'H', fig.cap = "Comparison of simulated reciprocity distributions for two-dimensional Poisson posterior and MKL point estimate based on 1000 simulations" >>=
+
 # Compare modularity distribution from simulating from MKL point estimate vs. posterior distribution
+
+# Normalized ####
 rec.data = data.frame(model = c(rep("D = 2", nsim), rep("D = 2, mkl", nsim)), 
                       reciprocity = c(tmp2.norm, tmp2mkl.norm))
+
 recplot2.norm = ggplot(rec.data, aes(x = reciprocity, fill = model)) +
   geom_histogram(position = "identity", bins = 40) +
   geom_vline(xintercept = Q.norm, color = "gray", show.legend = T) + 
-  geom_text(x=Q.norm, label="observed", y = 68, colour="gray", angle=90,
+  geom_text(x=Q.norm, label="observed", y = 65, colour="gray", angle=90,
             vjust = -.2, size=3) +
   theme_bw() + facet_wrap(~model, scales = "fixed") + 
   theme(legend.position = "none") + 
@@ -1993,20 +2016,23 @@ recplot2.norm = ggplot(rec.data, aes(x = reciprocity, fill = model)) +
   scale_fill_manual(values = c(hue_pal()(3)[2], hue_pal()(4)[4])) +
   labs(x = "Normalized Reciprocity")
 
+# Unnormalized ####
+
 rec.data = data.frame(model = c(rep("D = 2", nsim), rep("D = 2, mkl", nsim)), 
                       reciprocity = c(tmp2, tmp2mkl))
 recplot2 = ggplot(rec.data, aes(x = reciprocity, fill = model)) +
   geom_histogram(position = "identity", bins = 40) +
   geom_vline(xintercept = Q, color = "gray", show.legend = T) + 
-  geom_text(x=Q, label="observed", y = 68, colour="gray", angle=90,
+  geom_text(x=Q, label="observed", y = 80, colour="gray", angle=90,
             vjust = -.2, size=3) +
   theme_bw() + facet_wrap(~model, scales = "fixed") + 
-  theme(legend.position = "none") + 
+  theme(legend.position = "none") +
+  scale_x_discrete(limits=c(360000, 400000) )+
   geom_hline(yintercept = 0, col = "gray", size = .3) +
   scale_fill_manual(values = c(hue_pal()(3)[2], hue_pal()(4)[4])) +
   labs(x = "Reciprocity")
 
-cowplot::plot_grid(recplot1.norm, recplot1, rel_widths = c(.8, 1), nrow = 1)
+cowplot::plot_grid(recplot2.norm, recplot2, rel_widths = c(1, 1), nrow = 1)
 
 @
 
@@ -2102,14 +2128,14 @@ points(sort(exptrans(QSmat, cutoff)), col = "blue", type = "l")
 
 \subsubsection{Sensitivity} \label{sensitivity}
 
-<<hyperpriors, eval = F, cache = T, echo = F, results = 'hide', warning= F, message = F, fig.keep='none'>>=
+<<hyperpriors, eval = T, cache = T, echo = F, results = 'hide', warning= F, message = F, fig.keep='none', dependson= c("llik_and_latent_qn")>>=
 
 # Which parameters could we adjust for more realistic priors?
 # We consider putting narrower priors on the variance and intercept parameters
 
 # Adjust the models ####
 
-N = 47
+N = 47; d = 2
 sender.var.df = 2*3 #default 3 ** shrink sender range
 receiver.var.df  = 2*3 #default 3 ** shrink receiver range
 Z.var.df = 2*sqrt(N)  #default sqrt(N) ** shrink z range
@@ -2119,8 +2145,8 @@ prior.receiver.var = .5
 prior.Z.var = N/32 #default N/8 ** shrink sigma_z range
 beta.var = 1 #default 9
 
-quantile(rinvchisq(100000, sender.var.df, prior.sender.var), probs = c(0.05, .95))
-quantile(rinvchisq(100000, Z.var.df, prior.Z.var), probs = c(0.05, .95))
+quantile(rinvchisq(100000, sender.var.df, prior.sender.var), probs = c(0.05, .5, .95))
+quantile(rinvchisq(100000, Z.var.df, prior.Z.var), probs = c(0.05, .5, .95))
 
 samp1 = rep(0, 500)
 median1 = rep(0, length(samp1))
@@ -2132,12 +2158,12 @@ for (i in 1:length(samp1)) {
   sender.var = rinvchisq(1, sender.var.df, prior.sender.var)
   receiver.var = rinvchisq(1, receiver.var.df, prior.receiver.var)
   Z.var = rinvchisq(1, Z.var.df, prior.Z.var)
-  object$map = list(
+  object = list(map = list(
     beta = rnorm(1, 0, sd = sqrt(beta.var)),
     sender = rnorm(N, 0, sqrt(sender.var)),
     receiver = rnorm(N, 0, sqrt(receiver.var)),
     Z = matrix(rnorm(N*d, 0, sqrt(Z.var)), nrow = N, ncol = d)
-  )
+  ))
   median1[i] = median(predict.lsqn(object, type = "rpois"), na.rm = T)
   mean1[i] = mean(predict.lsqn(object, type = "rpois"), na.rm = T)
 }
@@ -2145,11 +2171,16 @@ Z_dist = dist2(object$map$Z)
 summary(median1)
 summary(mean1)
 
-# BETTER, no non-zero derivatives
-latent_qn2.h = lsqn(Y = Y, N = 47, D = 2, runs = 50, tol = .01,
+set.seed(1) #best of a few attempts
+latent_qn2.h = lsqn(Y = t(Cmatrix), N = 47, D = 2, runs = 50, tol = .01, Z.init = "rnorm",
      v_a = sender.var.df, v_b = receiver.var.df, v_z = Z.var.df,
      s2_a = prior.sender.var, s2_b = prior.receiver.var, s2_z = prior.Z.var,
      sigma2_B = beta.var ) 
+
+range(latent_qn2.h$map$diff_Z); range(latent_qn2.h$map$diff_Z2)
+@
+
+<< latent_hyperpriors, eval = T, cache = T, echo = F, results = 'hide', warning= F, message = F, fig.keep='none', dependson= c("llik_and_latent_qn")>>=
 
 latent.srp2.h = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver, 
                     response = "citations", family = "Poisson.log", seed = 30,
@@ -2165,21 +2196,21 @@ latent.srp2.h = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
                                             refine.user.start = F),
                     user.start = with(latent_qn2.h$map, list(Z=Z, sender=sender, receiver=receiver,
                                             beta = beta, sender.var = sender.var,
-                                            receiver.var = receiver.var, Z.var = Z.var)),
-                    verbose = 3)
+                                            receiver.var = receiver.var, Z.var = Z.var))
+                    )
 
 # Analyze ####
 
 model = latent.srp2.init.r
 sd2 = apply(model$sample$receiver - model$sample$sender, 2, sd)
 latent2 = model$mkl$receiver - model$mkl$sender
-centipede1 = t(cbind(latent2, latent2 - 1.96*sd2, latent3 + 1.96*sd2))
+centipede1 = t(cbind(latent2, latent2 - 1.96*sd2, latent2 + 1.96*sd2))
 colnames(centipede1) = Cnet%v%"vertex.names"
 
 model = latent.srp2.h
 sd.h = apply(model$sample$receiver - model$sample$sender, 2, sd)
 latent.h = model$mkl$receiver - model$mkl$sender
-centipede.h = t(cbind(latent.h, latent.h - 1.96*sd.h, latent3 + 1.96*sd.h))
+centipede.h = t(cbind(latent.h, latent.h - 1.96*sd.h, latent.h + 1.96*sd.h))
 colnames(centipede.h) = Cnet%v%"vertex.names"
 
 par(mfrow = c(1,2))
@@ -2190,33 +2221,20 @@ centipede.plot(centipede.h, vgrid = c(-1,0,1,2), cex = .7, right.labels = round(
 cor(latent2, latent.h)
 cor(sd.h^2, sd2^2)
 
-# Experimenting ####
-
-#model_citeh = lsqn(Y, runs = 50, tol = .01, v_z = 1, s2_z = 10) #worst, Z.var too small
-#model_cite.h = lsqn(Y, runs = 50, tol = .01, v_z = 20, s2_z = 10)
-#model_cite.h2 = lsqn(Y, runs = 100, tol = .01, v_z = 10, s2_z = N/8, v_a = 1, s2_a = 1, v_b = 1, s2_b = 1)
-
-#plot(model_cite.h2$map$Z, col = col2, pch = 16)
-
-
-
 @
 
-As with any Bayesian model we must consider the sensitivity of estimates to the assumptions contained in the prior structure and hyperprior values. However, we find such a strong correlation (0.999) between the rating scores resulting from the MLE and MKL estimates that there is little reason to suspect bias undue influence from the priors. Still, we consider shrinking the prior intercept variance to one, and adjustments to the hyperprior degrees of freedom and variances. This narrows the prior distributions on variance parameters to more realistic ranges based on previous results. The prior distributions on sender and receiver variances have middle 90 percent intervals of roughly .2 to 1.8 instead of .4 to 8.5, and for position variance 0.9 to 3.2 instead of 2.9 to 20. The impact on the results is trivial. The updates estimtes of scores and their variances have barely changed from the previous estimates (correlation > 0.99).
-
-The quasi-Netwon estimation method is more sensitive to the hyperpriors, and we use the adjusted hyperprior values to produce final estimates.
+As with any Bayesian model we must consider the sensitivity of estimates to the assumptions contained in the prior structure and hyperprior values. However, we find such a strong correlation (0.999) between the rating scores resulting from the MLE and MKL estimates that there is little reason to suspect undue influence from the priors. Still, we consider shrinking the prior intercept variance to one, and adjustments to the hyperprior degrees of freedom and variance. These adjustments narrow the prior distributions on variance parameters to more realistic ranges based on previous results. The middle 90 percent intervals drop to roughly $[0.2, 1.8]$ instead of $[0.4, 8.5]$ for sender and receiver variances, and $[0.9, 3.2]$ instead of $[2.9, 20]$ for position variance. The impact on the results is trivial. The updated estimates of scores and their variances barely change from the previous estimates (correlation $> 0.99$).
 
 \subsubsection{Comparison of Estimation Methods} \label{estimeval}
 
-<< compare_latent_models, eval = T, echo = F, cache=T, results='asis', cache.comments = FALSE, warning= FALSE, dependson = c("latent_sr2_init_r, latent_sr2")>>=
-mcmc.diagnostics(latent.srp2.init.r)
+<<compare_latent_models, eval = T, echo = F, cache=T, results='asis', cache.comments = FALSE, warning= FALSE, dependson = c("latent_sr2_init_r", "latent_sr2", "latent_qn")>>=
 
-mcmc.diagnostics(latent.srp2)
 results.table = data.frame(row.names = c("Quasi-Newton", "optim (L-BFGS-B)", "MCMC (MKL)", "MCMC.init.r (MKL)" ))
 results.table$"Time (min)" = c("$<1$", "$<1$", round(t2.srp2 - t1.srp2), round(t2.init.r - t1.init.r))
 results.table$"$l(Y|\\hat{\\theta})$" = as.character(round(
                                 c(llik(latent_qn$map, Y = t(Cmatrix), est = "Y"), 
                                 llik(latent.srp2.init.r$burnin.start, Y = t(Cmatrix), est = "Y"),
+                                #latentnet finds a conditional posterior mode using optim before burnin
                                 llik(latent.srp2$mkl, Y = t(Cmatrix), est = "Y"),
                                 llik(latent.srp2.init.r$mkl, Y = t(Cmatrix), est = "Y"))))
 results.table$"$l(\\hat{\\theta})$" = as.character(round(
@@ -2228,6 +2246,7 @@ results.table$"$l(\\hat{\\theta})$" = as.character(round(
                                 with(latent.srp2.init.r$mcmc.mle, llik(latent.srp2.init.r$mkl,
                                      Y = t(Cmatrix), sender.var = sender.var,
                                      receiver.var = receiver.var, Z.var = Z.var, est = "theta")))))
+results.table$"$l(\\hat{\\theta}|Y)$" = as.character(as.numeric(results.table$"$l(Y|\\hat{\\theta})$") + as.numeric(results.table$"$l(\\hat{\\theta})$"))
 
 results.table$sample = c("No", "No", "Yes", "Yes")
 results.table$code = c("R", "C", "C", "C")
@@ -2242,67 +2261,45 @@ results.table$"Score Cor." = c(cor(latent2, latent_qn$map$receiver - latent_qn$m
 print(xtable(results.table, caption = "Estimation Methods", digits = 4, label = "results.table"),
       sanitize.text.function=function(x){x})
 
-  # random initialization and direct optimization get best map results.
-  # random initialization and no mcmc has highest graph probability, but in terms of ranks it's basically identical. and the positions are extremely similar.
-  # mcmc doesn't really add to likelihood
-  
-est = "MAP"
+# MCMC diagnostics ####
 
-with(latent.srp2.init.r$mcmc.mle, llik(latent.srp2.init.r$mkl, Y = t(Cmatrix), #use?
-    sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var, est = est))
+  # these all look fine
+  # mcmc.diagnostics(latent.srp2)
+  # mcmc.diagnostics(latent.srp2.init.r)
+  # mcmc.diagnostics(latent.srp2.init.r.sann)
 
-llik(latent.srp2.init.r$mcmc.mle, Y = t(Cmatrix), est = est)
+# Other estimates ####
+# est = "Y"
+# llik(latent.srp2.init.r$mcmc.mle, Y = t(Cmatrix), est = est)
+# llik(latent.srp2.init.r$mcmc.pmode, Y = t(Cmatrix), est = est)
+# with(latent.srp2.init.r.bfgs$mcmc.mle, llik(latent.srp2.init.r.bfgs$mkl, Y = t(Cmatrix), sender.var = sender.var, receiver.var = receiver.var,  Z.var = Z.var, est = est))
+#llik(latent.srp2.init.r.bfgs$mcmc.mle, Y = t(Cmatrix), est = est)
+#llik(latent.srp2.init.r.bfgs$mcmc.pmode, Y = t(Cmatrix), est = est)
 
-llik(latent.srp2.init.r$mcmc.pmode, Y = t(Cmatrix), est = est)
-  
-llik(latent.srp2.init.r$burnin.start, Y = t(Cmatrix), est = est) #mle?
+#same as sann
+#with(latent.srp2.init.r.bfgs, llik(t(Cmatrix), mkl$sender, mkl$receiver, mkl$beta, mkl$Z,  mcmc.mle$sender.var, mcmc.mle$receiver.var, mcmc.mle$Z.var,est = est))
 
-llik(latent.srp2.init.r$mcmc.mle, Y = t(Cmatrix), est = est)
-
-llik(latent.srp2.init.r$mcmc.pmode, Y = t(Cmatrix), est = est)
-   
-with(latent.srp2.init.r.bfgs$mcmc.mle, llik(latent.srp2.init.r.bfgs$mkl,
-                Y = t(Cmatrix), sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var, est = est))
-
-llik(latent.srp2.init.r.bfgs$mcmc.mle, Y = t(Cmatrix), est = est)
-
-llik(latent.srp2.init.r.bfgs$mcmc.pmode, Y = t(Cmatrix), est = est)
-
-#plot(latent.srp2.init.r$mkl$Z, col = col2, pch = 16)
-#plot(vegan::procrustes(latent.srp2.init.r$mkl$Z, latent.srp2.init.r$burnin.start$Z)$Yrot, col = col2, pch = 16)
-
-  #these all look fine
-  #mcmc.diagnostics(latent.srp2)
-  #mcmc.diagnostics(latent.srp2.init.r)
-  #mcmc.diagnostics(latent.srp2.init.r.sann)
-  
-  #same as sann
-  #with(latent.srp2.init.r.bfgs, llik(t(Cmatrix), mkl$sender, mkl$receiver, mkl$beta, mkl$Z,  mcmc.mle$sender.var, mcmc.mle$receiver.var, mcmc.mle$Z.var,est = est))
-  
-  # best mcmc.mle estimate consistently a little workse than mkl
+# best mcmc.mle estimate consistently a little workse than mkl
   # with(latent.srp2$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z,sender.var, receiver.var, Z.var, est = est))
   # with(latent.srp2.init.r.sann$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
   # with(latent.srp2.init.r.bfgs$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
+ # even worse with #(latent.srp2, llik(Y, mkl$sender, mkl$receiver, mkl$beta, mkl$Z, sum(mkl$sender^2 + v_a*s2_a^2) / (N + 2 + v_a), sum(mkl$receiver^2 + v_b*s2_b^2) / (N + 2 + v_b), sum(as.vector(mkl$Z)^2 + v_z*s2_z^2) / (N*d + 2 + v_z), est = "MAP"))
 
- #even worse with #(latent.srp2, llik(Y, mkl$sender, mkl$receiver, mkl$beta, mkl$Z, sum(mkl$sender^2 + v_a*s2_a^2) / (N + 2 + v_a), sum(mkl$receiver^2 + v_b*s2_b^2) / (N + 2 + v_b), sum(as.vector(mkl$Z)^2 + v_z*s2_z^2) / (N*d + 2 + v_z), est = "MAP"))
+# Compare positions (with or without procrustes) ####
+#plot(latent.srp2.init.r$mkl$Z, col = col2, pch = 16)
+#plot(vegan::procrustes(latent.srp2.init.r$mkl$Z, latent.srp2.init.r$burnin.start$Z)$Yrot, col = col2, pch = 16)
 
 @
 
-Table \ref{compare_latent_models} compares the results for the two-dimensional Poisson latent space model with four different estimations techniques: 1) The quasi-Netwon method outlined in section \ref{QN}; 2) The limited-memory bounded quasi-Newton method implemented by the \code{optim} function from the \proglang{R} base package \pkg{stats}, which is the intermediate optimization method of \pkg{latentnet}; 3) MCMC estimation as implemented by \pkg{latentnet} 4) MCMC from \pkg{latentnet} with random initialization as used in quasi-Newton method 1.
+Table \ref{results.table} compares the results for the two-dimensional Poisson latent space model with four different estimations techniques: 1) The quasi-Netwon method outlined in section \ref{QN}; 2) The limited-memory bounded quasi-Newton method implemented by the \code{optim} function in the \proglang{R} base package \pkg{stats}. This is the intermediate optimization method of \pkg{latentnet}; 3) MCMC estimation as implemented by \pkg{latentnet}; 4) MCMC as in method three but with random initialization as used in quasi-Newton method one. For MCMC methods we check for convergence and appropriate MCMC interval and burn-in values using the \code{mcmc.diagnostics} function of \pkg{latentnet}. (The MCMC method of row three seems to converge based on diagnostic plots, but could potentially achieve the estimate of method four with a much longer burn-in.) For our quasi-Netwon method we check that all calculated first derivatives are approximately zero and all second derivatives are negative. The log likelihoods shown in columns two through four are up to a constant value.
 
-- probabilities up to a constant. 
-For MCMC methods we checked for convergence and appropriate MCMC interval and burn-in values using the \code{mcmc.diagnostics} function of \pkg{latentnet}. 
-The MCMC estimation without random initialization (method 3) is much slower than with random initialization (method 4) because the burn-in period must be three times as long. Still either method could be sped up if the control parameters are perfectly chosen, but the process of selecting them would probably negate the time benefits. The MKL estimates are used for both MCMC methods and had higher probab
+We present MKL estimates from MCMC methods because they have higher posterior and graph likelihood than other point estimates, such as the posterior mode. Results in previous sections have all drawn on the MKL estimates from the MCMC estimation with random initializaiton (row four). The MCMC methods are much slower than the quasi-Newton methods, although they have the advantage of returning a posterior sample. The much faster estimates from the quasi-Newton methods are very highly correlated with these results (column four). For larger networks where we are primarily interested in a point estimate, the quasi-Netwon methods are probably preferable.
 
-Results in previous sectios have all drawn on the MKL  presented the parameter estimate with the highest posterior likelihood. 
-
-- although the quasi-Newton estimates were produced using different hyperpriors than the MCMC estimates, for consistency the 
-
-Timing of computations was done in R 3.3.2 with a MacBookPro with 2.6 GHz Intel Core i5 processor with 8 GB 1600 MHz DDR3 memory without. Although not employed here, \pkg{latentnet} does allow for parallel processing of multiple MCMC chains. 
+Timing of computations was in R 3.3.2 with a MacBookPro, 2.6 GHz Intel Core i5 processor with 8 GB 1600 MHz DDR3 memory without. The ``code'' column indicates if the main operations are performed in \proglang{R} or \proglang{C}. Although not employed here, \pkg{latentnet} does allow for parallel processing of multiple MCMC chains. The estimates should be considered ballpark for each method, as the number of iterations for the quasi-Netwon methods and control parameters for the MCMC could be augmented to achieve some speed-up. However, the process of optimizing these would mostly likely negate the time benefits. 
 
 \section{Movie Rating and Genre Identification}\label{Example2}
 
-In this section we apply latent space rating to a set of films with viewer-supplied star ratings. Film rating systems based on viewer ratings are biased by the fact that viewers do not choose movies to rate randomly, and they may skew high or low in their ratings. In addition, average ratings obscure the information provided by the volume of ratings for different films. Our method efficiently address those challenges. The concomitant visualizations also aid in genre detection and enhance our ability to explore and compare related films. We compare our results to user star averages, but focus our analysis on the value-added of the latent positions for exploring the network and for genre identification.  Through a dynamic network plot we increase the amount of data we can present. Movie ratings are extremely subjective, so without knowing detailed individual preferences the ability to explore a network of films may be more useful than finding ``correct'' ratings.
+In this section we apply latent space rating to a set of films with viewer-supplied star ratings. Film rating systems based on viewer ratings are biased by the fact that viewers do not choose movies to rate randomly, and they may skew high or low in their ratings. In addition, average ratings obscure the information provided by the volume of ratings for different films. The latent space rating method efficiently addresses those challenges. The concomitant visualizations aid in genre detection and enhance our ability to explore and compare related films.  Through a dynamic network plot we increase the amount of data we can present. Movie ratings are extremely subjective, so without knowing detailed individual preferences the ability to explore a network of films may be more useful than finding ``correct'' ratings. We compare our results to user star averages. 
 
 %See full code in movie_example.R
 
@@ -2317,36 +2314,96 @@ Our data comes from the MovieLens data set \citep{movielens}, collected by the G
 To convert the data into a network format we aggregate differences in individual users' ratings to form a $3952 \times 3952$ ratings-difference matrix. To be explicit, entry $i, j$ in the matrix represents the sum, over all users who have rated movie $i$ and movie $j$, of positive values of $rating(j) - rating(i)$. (If $rating(i) > rating(j)$ the difference is added to entry $j,i$.) For example, if a user prefers movie $j$ to $i$ by one point, then one is added to entry $i, j$: $i$ ``sends'' a point to $j$. The corresponding network is positive-valued and directed. 
 %note the data isn't quite coints, as the differences range between 1 and 4, but most are 1 or 2. Overdispersed?
 
-To illustrate certain points without too much computational burden we restrict ourselves to a subset of the MovieLens data, retaining only movies assigned genre ``Action'', ``Crime'', ``Western'' or some combination therein. (Only two of the possible combinations are present in the data.) We remove a small number of isolates before modeling. The resulting network has 130 nodes and 11,393 edges.
+To illustrate certain points without too much computational burden we restrict ourselves to a subset of the MovieLens data, retaining only movies assigned genre ``Action'', ``Crime'', ``Western'' or some combination therein. (Only two of the possible combinations are present in the data.) We remove a small number of isolates before modeling. The resulting network has 128 nodes and 11,393 edges.
 
 \subsection{Latent Space Model}\label{Model2}
 
-By modeling the network of differences in ratings, we capture the tendency for a movie to be frequently and consistently rated above movies that draw an overlapping audience. Code to implement our model in \pkg{latentnet} is included in the supplementary material.
-
 %full movie net is saved as movie_net.rds
 <<r movie_data, eval = T, echo = F, cache = T>>=
+
 movie = readRDS("~/Documents/citation/latent_ranking/movie_output.RDS")
 movie_net_acw = movie$movie_net_acw
 movie_net_acw_full = movie$movie_net_acw_full
 movie_net_watch_full = movie$movie_net_watch_full
 vc.acw = movie$vc.acw
 latent_acw2 = movie$latent_acw2
+
+acw_mat = as.sociomatrix(movie_net_acw_full, attrname = "ratings_diff", ignore.eval = F)
+rownames(acw_mat) = movie_net_acw_full%v%"titles"
 @
 
-<<r movie_model, eval = F, echo = F, results = 'asis', highlight = F>>=
+<<r movie_model, cache = T, eval = T, echo = F, results = 'hide', highlight = F, warning = F>>=
+
+t1.acw2 = Sys.time()
 latent_acw2 = ergmm(movie_net_acw_full ~ euclidean(d=2) + rreceiver + rsender, 
              response = "ratings_diff", family = "Poisson.log",
              control = control.ergmm(pilot.runs = 4,  burnin = 500000, 
-             interval = 100, sample.size = 10000), seed = 123)
+             interval = 500, sample.size = 5000), seed = 123)
+t2.acw2 = Sys.time()
+
+@
+
+% Settings too low, mcmc diagnostics bad
+<<r movie_model_b, cache = T, eval = F, echo = F, results = 'hide', highlight = F, warning = F>>=
+
+#try shorter burnin
+t1.acw2b = Sys.time()
+latent_acw2b = ergmm(movie_net_acw_full ~ euclidean(d=2) + rreceiver + rsender, 
+             response = "ratings_diff", family = "Poisson.log",
+             control = control.ergmm(pilot.runs = 8,  burnin = 100000, 
+             interval = 100, sample.size = 1000), seed = 123)
+t2.acw2b = Sys.time()
+
 @
 
 %even with a very long burning (5mill, took about 6hrs with interval 500, sample 10000) the final map only increases by a few over initial direct optimization
 
-<<r movie_model_r, eval = F, echo = F, results = 'asis', highlight = F, cache = T>>=
+<<r movie_model_qn, cache = T, eval = T, echo = F, results = "hide", fig.keep = "none">>=
 
-M = as.sociomatrix(movie_net_acw_full, ignore.eval = F, attrname = "ratings_diff")
+N = nrow(acw_mat)
+
+#Default Hyperpriors: ####
+set.seed(1)
+t1.acw.qn = Sys.time()
+acw.qn = lsqn(acw_mat, runs = 100, tol = .01, Z.init = "rnorm")
+t2.acw.qn = Sys.time()
+range(acw.qn$map$diff_Z); range(acw.qn$map$diff_Z2); acw.qn$map$llik #471435.1
+
+#Adjust Hyperpriors: ####
+set.seed(5)
+t1.acw.qn.h = Sys.time()
+acw.qn.h = lsqn(acw_mat, runs = 100, tol = .01, Z.init = "rnorm",
+              v_a = 6, v_b  = 6, #default 3 
+              v_z = sqrt(N)/4,  #default sqrt(N)
+              s2_a = 1, s2_b = 1, #default 1
+              s2_z = 1, #default N/8 ** shrink sigma_z range
+              sigma2_B = 3) #default 9)
+t2.acw.qn.h = Sys.time()
+#quantile(rinvchisq(100000, 3, 1), probs = c(0.05, .5, .95)) #.8, 2
+#quantile(rinvchisq(100000, sqrt(N)/4, 1), probs = c(0.05, .5, .95)) #1.3 
+range(acw.qn.h$map$diff_Z); range(acw.qn.h$map$diff_Z2); acw.qn.h$map$llik 
+
+# Evaluate
+est = "MAP"
+llik(acw.qn$map, Y = acw_mat, est = est)
+llik(acw.qn.h$map, Y = acw_mat, est = est)
+llik(latent_acw2$mcmc.mle, Y = acw_mat, est = est)
+llik(latent_acw2$mkl, Y = acw_mat, est = est)
+
+xlim = c(-4,4); 
+plot(acw.qn$map$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
+plot(acw.qn.h$map$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
+plot(latent_acw2$mkl$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
+plot(latent_acw2$mcmc.mle$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
+
+
+@
+
+<<r movie_model_r, eval = T, echo = F, results = 'hide', highlight = F, cache = T, dependson = c("movie_data"), warning = F>>=
+
+M = acw_mat
 N = nrow(M); n = N; D= 2; d = 2; 
-v_z = sqrt(N); s2_z = N/8
+v_z = sqrt(N); s2_z = N/16
 Z_dist = dist2(M)
 Z = cmdscale(Z_dist, k = D)
 Z = Z/max(abs(Z))
@@ -2356,27 +2413,254 @@ b = rnorm(N)
 sigma2_a = var(a)
 sigma2_b = var(b)
 
+t1.acw2.r = Sys.time()
 latent_acw2.r = ergmm(movie_net_acw_full ~ euclidean(d=2) + rreceiver + rsender,
                       response = "ratings_diff", family = "Poisson.log",
-                      control = control.ergmm(pilot.runs = 4,  burnin = 0,
-                      interval = 100, sample.size = 1000), seed = 123,
+                      control = control.ergmm(pilot.runs = 8,  burnin = 500000,
+                      interval = 500, sample.size = 5000), seed = 123,
                       user.start = list(Z = Z, sender = a, receiver = b, 
                                         sender.var = sigma2_a,
                                         receiver.var = sigma2_b,
                                         Z.var = sigma2_z))
+t2.acw2.r = Sys.time()
+@
 
-llik(latent_acw2.r$mkl, Y = M, sender.var = latent_acw2.r$mcmc.mle$sender.var, 
-     receiver.var = latent_acw2.r$mcmc.mle$receiver.var, Z.var = latent_acw2.r$mcmc.mle$Z.var)
+<<r movie_model_init_qn, eval = T, echo = F, results = 'hide', highlight = F, cache = T, dependson = c("movie_data"), warning = F>>=
+
+t1.acw2.init.qn = Sys.time()
+latent_acw2.init.qn = ergmm(movie_net_acw_full ~ euclidean(d=2) + rreceiver + rsender,
+                      response = "ratings_diff", family = "Poisson.log",
+                      control = control.ergmm(pilot.runs = 8,  burnin = 500000,
+                      interval = 500, sample.size = 5000), seed = 123,
+                      user.start = with(acw.qn.h$map, list(Z=Z, sender=sender, receiver=receiver,
+                                             beta = beta, sender.var = sender.var,
+                                             receiver.var = receiver.var, Z.var = Z.var))
+                      )
+t2.acw2.init.qn = Sys.time()
+@
+
+<<r movie_model_h, eval = T, echo = F, results = 'hide', highlight = F, cache = T, dependson = c("movie_data"), warning = F>>=
+
+#adjustment to hyperpriors from default
+
+t1.acw2.h = Sys.time()
+latent_acw2.h = ergmm(  movie_net_acw_full ~ euclidean(d=2) + rreceiver + rsender, 
+                        response = "ratings_diff", family = "Poisson.log", seed = 123,
+             
+                        prior = ergmm.prior(sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                        sender.var = 1,
+                                        receiver.var = 1, 
+                                        Z.var = 1,
+                                        beta.var = 3),
+                        
+                        control = control.ergmm(pilot.runs = 8,  burnin = 500000, 
+                        interval = 500, sample.size = 5000, mle.maxit = 100)
+
+                       )
+  
+t2.acw2.h = Sys.time()
+
 
 @
 
-<<r movie_model_r2, eval = T, echo = T, results = 'asis', highlight = F, cache = T>>=
-llik(latent_acw2.r$mkl, Y = M, sender.var = latent_acw2.r$mcmc.mle$sender.var, 
-     receiver.var = latent_acw2.r$mcmc.mle$receiver.var, Z.var = latent_acw2.r$mcmc.mle$Z.var)
+<<r movie_model_eval, eval = T, echo = F, message = F, warning = F, dependson = ("movie_data")>>=
+library(latentnet)
+
+#mcmc.diagnostics(latent_acw2)
+#mcmc.diagnostics(latent_acw2b)
+#mcmc.diagnostics(latent_acw2.r)
+#mcmc.diagnostics(latent_acw2.h)
+
+#par(mfrow = c(1,2))
+#plot(latent_acw2$mkl$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16)
+#plot(latent_acw2.h$mkl$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16)
 
 @
 
-<< latent_watch_init_r, eval = T, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
+By modeling the network of differences in ratings we capture the tendency for a movie to be frequently and consistently rated above movies that draw an overlapping audience. As above, we apply the latent space Poisson model in two dimensions to faciliatate visualization. Results are presented in Table \ref{movie.table}. The methods presented in the first four rows are the same as in Table \ref{results.table}. The MKL estimates are again are the best of the estimates produced by the MCMC estimation. For comparison, we include in rows five and six the MCMC MLE and MCMC posterior mode, the maximum likelihood and maximum posterior probabilty sample iterations. Although the fit from MCMC estimation is not sensitive to initialization method in this example, %default, random, and quasi-Newton initialization all about the same
+the time is somewhat affected. In addition, the bounded quasi-Netwon method (row two) achieves better results in less time (about two minutes instead of ten) when using the same initialization as  our quasi-Netwon method.
+
+As above we consider adjustments to the hyperpriors that narrow the range of prior variance distributions and find the impact on ratings to be trivial (row 7). However, the hyperprior adjustments do benefit the speed of fit and the visualization, by limiting the amount that very low-connectivity nodes drift from the rest. These results are subsequently used for visualization and analysis. For our our quasi-Newton method the use of more restrictive priors improves algorithm performance even when the output is evaluated on the scale of more diffuse priors, so this estimate is show in row one of the table. The calculations in columns three and four of Table \ref{movie.table} assume consistent diffuse priors.
+
+<<r movie_table, echo = F, results = "asis", dependson = c("movie_model", "movie_model_r", "movie_model_qn", "movie_model_h")>>=
+library(xtable)
+
+movie.table = data.frame(row.names = c("Quasi-Newton",
+                                       "optim (L-BFGS-B)",
+                                       "MCMC (MKL)",
+                                       "MCMC (MLE)",
+                                       "MCMC (P.mode)",
+                                       "MCMC.init.r (MKL)",
+                                       "MCMC.h (MKL)"))
+movie.table$"Time (min)" = c(as.character(round(difftime(t2.acw.qn.h, t1.acw.qn.h, units = "mins"), 1)), "2",  
+                             as.character(round(difftime(t2.acw2, t1.acw2, units = "mins"))), "-", "-",
+                             as.character(round(difftime(t2.acw2.r, t1.acw2.r, units = "mins"))),
+                             as.character(round(difftime(t2.acw2.h, t1.acw2.h, units = "mins"))))
+movie.table$"$l(Y|\\hat{\\theta})$" = as.character(round(
+                                c(llik(acw.qn.h$map, Y = acw_mat, est = "Y"), 
+                                llik(latent_acw2.r$burnin.start, Y = acw_mat, est = "Y"),
+                                llik(latent_acw2$mkl, Y = acw_mat, est = "Y"),
+                                llik(latent_acw2.r$mcmc.mle, Y = acw_mat, est = "Y"),
+                                llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = "Y"),
+                                llik(latent_acw2.r$mkl, Y = acw_mat, est = "Y"),
+                                llik(latent_acw2.h$mkl, Y = acw_mat, est = "Y"))))
+
+movie.table$"$l(\\hat{\\theta})$" = as.character(round(
+                                c(llik(acw.qn.h$map, Y = acw_mat, est = "theta"),
+                                llik(latent_acw2.r$burnin.start, Y = acw_mat, est = "theta"),
+                                with(latent_acw2$mcmc.mle, llik(latent_acw2$mkl,
+                                     Y = acw_mat, sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
+                                llik(latent_acw2.r$mcmc.mle, Y = acw_mat, est = "theta"),
+                                llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = "theta"),
+                                with(latent_acw2.r$mcmc.mle, llik(latent_acw2.r$mkl,
+                                     Y = acw_mat, sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
+                                with(latent_acw2.r$mcmc.mle, llik(latent_acw2.r$mkl,
+                                     Y = acw_mat, sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")))))
+
+movie.table$"$l(\\hat{\\theta}|Y)$" = as.character(as.numeric(movie.table$"$l(Y|\\hat{\\theta})$") + as.numeric(movie.table$"$l(\\hat{\\theta})$"))
+
+movie.table$sample = c("No", "No", "Yes", "-", "-", "Yes", "Yes")
+movie.table$code = c("R", "C", "C", "-", "-","C", "C")
+
+acw2 = latent_acw2.r$mkl$receiver - latent_acw2.r$mkl$sender
+movie.table$"Score Cor." = c(cor(acw2, acw.qn.h$map$receiver - acw.qn.h$map$sender),
+                               cor(acw2, latent_acw2$burnin.start$receiver - 
+                                            latent_acw2$burnin.start$sender), 
+                               cor(acw2, latent_acw2$mkl$receiver - latent_acw2$mkl$sender),
+                               cor(acw2, latent_acw2$mcmc.mle$receiver - latent_acw2$mcmc.mle$sender),
+                               cor(acw2, latent_acw2$mcmc.pmode$receiver - latent_acw2$mcmc.pmode$sender),
+                               cor(acw2, latent_acw2.r$mkl$receiver - 
+                                            latent_acw2.r$mkl$sender),
+                               cor(acw2, latent_acw2.h$mkl$receiver - 
+                                            latent_acw2.h$mkl$sender)
+                             )
+
+print(xtable(movie.table, caption = "Estimation Methods", digits = 4, label = "movie.table"),
+      sanitize.text.function=function(x){x})
+@
+
+<<r movie_results_likelihoods, eval = F, echo = F, results = "hide">>=
+
+cor(latent_acw2.r$mkl$receiver - latent_acw2.r$mkl$sender, latent_acw2.h$mkl$receiver - latent_acw2.h$mkl$sender)
+est = "Y"
+llik(acw.qn$map, Y = acw_mat, est = est)
+llik(acw.qn.h$map, Y = acw_mat, est = est)
+
+llik(latent_acw2$burnin.start, Y = acw_mat, est = est) 
+llik(latent_acw2.r$burnin.start, Y = acw_mat, est = est)
+llik(latent_acw2.h$burnin.start, Y = acw_mat, est = est)
+llik(latent_acw2.init.qn$burnin.start, Y = acw_mat, est = est)
+
+llik(latent_acw2$mcmc.mle, Y = acw_mat, est = est)
+llik(latent_acw2.r$mcmc.mle, Y = acw_mat, est = est)
+llik(latent_acw2.h$mcmc.mle, Y = acw_mat, est = est)
+llik(latent_acw2.init.qn$mcmc.mle, Y = acw_mat, est = est)
+
+llik(latent_acw2$mcmc.pmode, Y = acw_mat, est = est)
+llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = est)
+llik(latent_acw2.h$mcmc.pmode, Y = acw_mat, est = est)
+llik(latent_acw2.init.qn$mcmc.pmode, Y = acw_mat, est = est)
+
+llik(latent_acw2$mkl, Y = acw_mat, est = est) #second best
+llik(latent_acw2.r$mkl, Y = acw_mat, est = est)
+llik(latent_acw2.h$mkl, Y = acw_mat, est = est) #best
+llik(latent_acw2.init.qn$mkl, Y = acw_mat, est = est)
+
+est = "MAP"
+llik(acw.qn$map, Y = acw_mat, est = est)
+llik(acw.qn.h$map, Y = acw_mat, est = est)
+
+llik(latent_acw2$burnin.start, Y = acw_mat, est = est) #worst
+llik(latent_acw2.r$burnin.start, Y = acw_mat, est = est)
+llik(latent_acw2.h$burnin.start, Y = acw_mat, est = est)
+llik(latent_acw2.init.qn$burnin.start, Y = acw_mat, est = est)
+
+llik(latent_acw2$mcmc.mle, Y = acw_mat, est = est)
+llik(latent_acw2.r$mcmc.mle, Y = acw_mat, est = est)
+llik(latent_acw2.h$mcmc.mle, Y = acw_mat, est = est)
+llik(latent_acw2.init.qn$mcmc.mle, Y = acw_mat, est = est)
+
+llik(latent_acw2$mcmc.pmode, Y = acw_mat, est = est)
+llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = est)
+llik(latent_acw2.h$mcmc.pmode, Y = acw_mat, est = est)
+llik(latent_acw2.init.qn$mcmc.pmode, Y = acw_mat, est = est)
+
+with(latent_acw2$mcmc.mle, llik(latent_acw2$mkl, Y = acw_mat, est = est, #best
+     sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
+with(latent_acw2.r$mcmc.mle, llik(latent_acw2$mkl, Y = acw_mat, est = est,
+     sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
+with(latent_acw2.h$mcmc.mle, llik(latent_acw2.h$mkl, Y = acw_mat, est = est,
+     sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
+with(latent_acw2.init.qn$mcmc.mle, llik(latent_acw2.init.qn$mkl, Y = acw_mat, est = est,
+     sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
+
+#compare p(theta) under adjusted hyperpriors
+tmp = as.character(round(
+                                c(llik(acw.qn.h$map, Y = acw_mat, est = "theta", sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                        prior.sender.var = 1,
+                                        prior.receiver.var = 1, 
+                                        prior.Z.var = 1,
+                                        beta.var = 3),
+                                llik(latent_acw2.r$burnin.start, Y = acw_mat, est = "theta", sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                               prior.sender.var = 1,
+                                        prior.receiver.var = 1, 
+                                        prior.Z.var = 1,
+                                        beta.var = 3),
+                                with(latent_acw2$mcmc.mle, llik(latent_acw2$mkl,
+                                     Y = acw_mat, sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta", sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                               prior.sender.var = 1,
+                                        prior.receiver.var = 1, 
+                                        prior.Z.var = 1,
+                                        beta.var = 3)),
+                                llik(latent_acw2.r$mcmc.mle, Y = acw_mat, est = "theta", sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                             prior.sender.var = 1,
+                                        prior.receiver.var = 1, 
+                                        prior.Z.var = 1,
+                                        beta.var = 3),
+                                llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = "theta", sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                              prior.sender.var = 1,
+                                        prior.receiver.var = 1, 
+                                        prior.Z.var = 1,
+                                        beta.var = 3),
+                                with(latent_acw2.r$mcmc.mle, llik(latent_acw2.r$mkl,
+                                     Y = acw_mat, sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta", sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                                prior.sender.var = 1,
+                                        prior.receiver.var = 1, 
+                                        prior.Z.var = 1,
+                                        beta.var = 3)),
+                                with(latent_acw2.r$mcmc.mle, llik(latent_acw2.r$mkl,
+                                     Y = acw_mat, sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta", sender.var.df = 6,
+                                        receiver.var.df = 6,
+                                        Z.var.df = sqrt(nrow(acw_mat)/4),
+                                               prior.sender.var = 1,
+                                        prior.receiver.var = 1, 
+                                        prior.Z.var = 1,
+                                        beta.var = 3)))))
+
+@
+% larger movie network
+
+<< latent_watch_init_r, eval = F, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
 
 W = as.sociomatrix(movie_net_watch_full, ignore.eval = F, attrname = "ratings_diff")
 #random initation of sender and receiver, and scaling Z helps the model fit
@@ -2402,7 +2686,7 @@ latent.watch.init.r = ergmm(movie_net_watch_full ~ euclidean(d = 2) + rsender + 
                                                 Z.var = var(as.vector(Z))))
 @
 
-<< latent_watch_mle, eval = T, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
+<< latent_watch_mle, eval = F, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
 
 latent.watch.mle = ergmm(movie_net_watch_full ~ euclidean(d = 2) + rsender + rreceiver,
                               response = "ratings_diff", family = "Poisson.log", seed = 30,
@@ -2414,95 +2698,77 @@ latent.watch.mle = ergmm(movie_net_watch_full ~ euclidean(d = 2) + rsender + rre
                                                 Z.var = var(as.vector(Z))))
 @
 
-There is a strong correlation of $0.94$ (or $0.975$ when weighted by the log of co-review counts) between a film's average rating and its ratings from the latent space model (receiver minus sender coefficient).
+There is a strong correlation of $0.95$ (or $0.976$ when weighted by the log of co-review counts) between a film's average rating and its ratings from the latent space model (receiver minus sender coefficient).
 %?($x$ unweighted, $x$ when weighted by the logged counts of ratings).
-Figure \ref{fig:r movie_compare} shows this correlation, plotting the latent space scores against the average ratings and labeling points by review counts for each film. The major outliers all have very low review counts, while films with high review counts fit closely in the linear trend. We take a closer look at a couple of the films that deviate from the trend but have more than $20$ reviews, highlighted in green. The corresponding films are, from left to right, \textit{Shaft in Africa (1973)} and \textit{Assassination (1987)}. These films have a potential ``cult'' following based on their lead actors, Richard Roundtree (as Shaft) and Charles Bronson respectively. That may boost some of the user reviews, but when comparative reviews are considered in the latent space model the derived rating is lower. 
+Figure \ref{fig:r movie_compare} shows this correlation, plotting the latent space scores against the average ratings and labeling points by review counts for each film. The major outliers all have very low review counts, while films with high review counts fit closely in the linear trend. The priors in the latent space model serve to pull these low-connectivity nodes slightly closer to the center. We take a closer look at a couple of the films that deviate from the trend but have more than $20$ reviews, highlighted in green. The corresponding films are, from left to right, \textit{Shaft in Africa (1973)} and \textit{Assassination (1987)}. These films have a potential ``cult'' following based on their lead actors, Richard Roundtree (as Shaft) and Charles Bronson respectively. That may boost some of the user reviews, but when comparative reviews are considered in the latent space model the derived rating is lower. 
 %also #79 with 32 reviews, Wanted: Dead or Alice (1987). Based on a three-season television show that launched steve mcqueen's career. 
- 
-<<r movie_init, eval = F, echo= F, results = 'asis', message = F, warning = F, cache = T>>=
 
-M = as.sociomatrix(movie_net_acw_full, ignore.eval = F, attrname = "ratings_diff")
-with(latent_acw2, llik(M, mkl$sender, mkl$receiver, mkl$beta, mkl$Z,
-                       mcmc.mle$sender.var, mcmc.mle$receiver.var,
-                       mcmc.mle$Z.var,
-                       est = est))
+<<r movie_compare, eval = T, echo = F, dependson = c("movie_data", "setup"), cache = T, message = FALSE, warning = FALSE, fig.height = 6, results = "hide", fig.cap= "Latent space model scores vs. average ratings. The plotting characters are the review counts for each film. Strong outliers to the linear trend have very few reviews are are excluded in calculating the best fit line. The green points are discussed in the paper." >>=
 
-N = nrow(M); n = N; D= 2; d = 2; 
-v_z = sqrt(N); s2_z = N/8
-Z_dist = dist2(Y)
-Z = cmdscale(Z_dist, k = D)
-Z = Z/max(abs(Z))
-sigma2_z = var(as.vector(Z))
-
-a = rnorm(N) #rep(0, N) # #sender
-b = rnorm(N) #rep(0, N) # #receiver
-sigma2_a = var(a)
-sigma2_b = var(b)
-B = 0 #intercept
-
-# i checked that this high enough enough maxit
-# standard random normal initiation better than latentnet type
-# now optim method is implemented in ergmm so any of these
-#  methods can be used
-theta.bfgs = optim(c(a, b, B, Z, sigma2_a, sigma2_b, 10), fn = llik2,
-                   Y = M, d = 2, method = "SANN",
-                   lower = c(rep(-Inf, 189), 0, 0, 0),
-                   control=list(maxit = 200, fnscale = -1))
-
-@
-
-<<r movie_compare, eval = T, echo = F, results = 'hide', dependson = c("movie_data", "setup"), cache = T, message = FALSE, warning = FALSE, fig.height = 6, fig.cap= "The correlation of latent space model scores and average ratings. The plotting characters are the review counts for each film. Outliers to the linear trend have very few reviews. The green points are those discussed in the paper. " >>=
+library(ggplot2)
 
 par(mai = c(.8,.8,.5,.8))
-stars1 = scale(movie_net_acw%v%"stars")
-vc.acw2 <- scale(vc.acw)
+stars1 = movie_net_acw_full%v%"stars"
+vc.acw = latent_acw2.h$mkl$receiver - latent_acw2.h$mkl$sender
+# highlight deviant - include 79 too? Wanted dead or alive is the other 32 count
+col1 = rep("black", length(stars1)); col1[c(78, 122)] = "green"; col1[ (movie_net_acw_full%v%"counts") < 5] = "red"
+data1 = data.frame(stars = stars1, rating = vc.acw,
+                   counts = movie_net_acw_full%v%"counts",
+                   color = col1)
+# to add trend line without outliers
+x <- which(movie_net_acw_full%v%"counts"<5)
+lm1 = lm(vc.acw[-x] ~ stars1[-x])
 
-plot(stars1, vc.acw2, use = "complete.obs", type = "n",
-     main = "Ratings Compared",  xlim = c(-2.5, 2), ylim = c(-2.5, 2), #one outlier not showen 
-     xlab = "Average Star Rating (scaled)", ylab = "2D Latent Space Model Rating (scaled)")
-col1 = rep(1, length(stars1)); col1[c(78, 120)] = 3 #highlight deviant
-text(labels = movie_net_acw%v%"counts", #paste(movie_net_acw%v%"vertex.names", 
-     stars1, vc.acw2, cex = .5, srt = -45, col = col1)
-#to see titles in plot:
-#text(labels = paste(movie_net_acw%v%"vertex.names", movie_net_acw%v%"counts"),
- #    movie_net_acw%v%"stars", vc.acw, cex = .6, srt = -45)
-
-#add trend line without outliers
-x <- which(movie_net_acw%v%"counts"<5)
-abline(lm(vc.acw2[-x] ~ stars1[-x]), col = "red")
+ggplot(data1, aes(x = stars, y = rating, color = color)) + 
+  geom_abline(slope = lm1$coefficients[2], intercept = lm1$coefficients[1], col = "gray") +
+  geom_text(aes(label=counts), size = 3) +
+  theme_bw() +
+  ggtitle("Ratings Compared") +
+  xlab("Average Star Rating") + 
+  ylab("2-D Latent Space Rating") +
+  theme(legend.position = "none") +
+  scale_colour_manual(values = c("black", "green", "red"))
 
 #check unweighted and weighted correlations
-cor(stars1 , vc.acw, use = "complete.obs") #.942
+cor(stars1 , vc.acw) #.942
 #weighted correlation even higher
-boot:::corr(cbind((stars1 )[!is.na(stars1 )], 
-           vc.acw[!is.na(stars1 )]),
-     w = log((movie_net_acw%v%"counts")[!is.na(stars1)])) #.975
+boot:::corr(cbind(stars1, vc.acw),
+     w = log((movie_net_acw_full%v%"counts"))) #.975
 
 @
 
-It is somewhat surprising to see such a strong correlation between the two ratings methods. This may be due in part to homogeneity in the reviewer pool, which reduces the sources of bias discussed above. MovieLens was organized by a university and all reviewers in our data joined in 2000. The top four occupations of the reviewers are (in decreasing order): college/grad student, other/not specified, executive/managerial and academic/educator. This is certainly not representative of the population at large. The impact of our difference-based network model over average ratings may be more evident when reviewers are more heterogeneous. 
+It is somewhat surprising to find such a strong correlation between the two ratings methods. This may be due in part to homogeneity in the reviewer pool, which reduces the sources of bias discussed above. MovieLens was organized by a university and all reviewers in our data joined in 2000. The top four occupations of the reviewers are (in decreasing order): college/grad student, other/not specified, executive/managerial and academic/educator. This is certainly not representative of the population at large. The impact of our difference-based network model over average ratings may be more evident when reviewers are more heterogeneous. 
 
 %Because the reviews are strongly correlated - almost all within a third of a point so overall impression the same - and we have no ground truth to compare to
-We next consider the additional insight gained through latent space model visualization. An interactive plot of the model output is available on the author's website (\url{http://www.stat.ucla.edu/~jane.carlen/pages/movie_net.html}). Each film is displayed as a node whose position is estimated by the latent space model. The nodes are colored by genre with size scaled to latent space model rating. For comparison, the average ratings are listed next to the movie titles in the drop-down menu and when hovering over a node. For clear visualization, the nodes are limited to displaying their (at most) seven strongest out-edges and nodes that are isolated as a result are not shown. In-degree is not limited in the plot.
+We next consider the additional insight gained through latent space model positions and visualization. An interactive plot of the model output is available on the author's website (\url{http://www.stat.ucla.edu/~jane.carlen/pages/movie_net.html}). Each film is displayed as a node whose position is estimated by the latent space model. The nodes are colored by genre with size scaled to latent space model rating. For comparison, the average star ratings are listed next to the movie titles in the drop-down menu and when hovering over a node. For clear visualization, the nodes are limited to displaying their (at most) seven strongest out-edges. In-degree is not limited in the plot.
 %An edge's arrow indicates the direction from lower to higher-rated film. <- removed that for visual clarity
 
-<<r movie_plot, eval = F, echo = F>>=
+<<r movie_plot_setup, eval = T, echo = F, results = "hide", dependson = c("movie_model_r", "movie_model_h")>>=
+write.csv(latent_acw2.h$mkl$Z, "~/Documents/citation/latent_ranking/movie_net_acwh_Z.csv")
+write.csv(latent_acw2.r$mkl$Z, "~/Documents/citation/latent_ranking/movie_net_acwr_Z.csv")
+@
 
-#not evaluated here. stored as movie_net.html
+<<r movie_plot, eval = F, echo = F, fig.keep = "none", dependson = c("movie_model_r", "movie_model_h")>>=
 
-nodes <- data.frame(id = 1:length(movie_net_acw%v%"vertex.names"), 
+#not evaluated here. stored as movie_neth.html
+Z = as.matrix(read.csv("~/Documents/citation/latent_ranking/movie_net_acwh_Z.csv")[,2:3])
+
+#to align with other picture
+Z = -Z[,2:1]
+movie_net = movie_net_acw #to see all edges use movie_net_acw_full
+  
+nodes <- data.frame(id = 1:length(movie_net%v%"titles"), 
                     label = "",
                     #label = movie_net_acw%v%"vertex.names",
-                    title = paste(movie_net_acw%v%"vertex.names", round(movie_net_acw%v%"stars",2)), #for selection dropdown
+                    title = paste(movie_net%v%"titles", round(movie_net%v%"stars",2)), #for selection dropdown
                     value = vc.acw, 
-                    group = movie_net_acw%v%"genres") #conveys node size, on a scale from 0-1
+                    group = movie_net%v%"genres") #conveys node size, on a scale from 0-1
 
-edges <- data.frame(from=data.frame(as.edgelist(movie_net_acw))$X1, 
-                    to=data.frame(as.edgelist(movie_net_acw))$X2)
+edges <- data.frame(from=data.frame(as.edgelist(movie_net))$X1, 
+                    to=data.frame(as.edgelist(movie_net))$X2)
                     #value = movie_net_acw%e%"avg_diff")
 
-acw_igraph <- graph.data.frame(edges, directed=TRUE, vertices=nodes)
-Z = as.matrix(read.csv("~/Documents/citation/latent_ranking/movie_net_acw_Z.csv")[,2:3])
+acw_igraph <- igraph::graph.data.frame(edges, directed=TRUE, vertices=nodes)
   
 visNetwork(nodes, edges, main = "Movie Network", submain = "latent space positions") %>%
   visIgraphLayout(acw_igraph, layout = "layout.norm",
@@ -2532,39 +2798,110 @@ visNetwork(nodes, edges, main = "Movie Network", submain = "latent space positio
 
 @
 
-The movies clearly cluster by genre even though genre was not a term in the model. Even those movies with hybrid genres are placed roughly between their two component genres. However, there are a few films that reside outside of their genre cluster. In those cases the plot can highlight incomplete or incorrect classification. For example, the film \textit{Coogan's Bluff} is categorized as a crime film by MovieLens, but its latent position is among actions and westerns. The Internet Movie Database (\textit{IMDb}) entry for this film describes it as ``An Arizona deputy goes to New York City to escort a fugitive back into custody,'' and the lead role is played by action/crime/western star Clint Eastwood \citep{imdb}. The film clearly has heavy action and western influences which its latent position reveals. If genre labels were missing from the data, we could use the latent positions to fill them in.
+The movies clearly cluster by genre even though genre was not a term in the model. Even those movies with hybrid genres are placed roughly between their two component genres. However, there are a few films that reside outside of their genre cluster. In those cases the plot can highlight incomplete or incorrect classification. For example, the film \textit{Coogan's Bluff (1968)} is categorized as a crime film by MovieLens, but its latent position is among actions and westerns. The Internet Movie Database (\textit{IMDb}) entry for this film describes it as ``An Arizona deputy goes to New York City to escort a fugitive back into custody,'' and the lead role is played by action/crime/western star Clint Eastwood \citep{coogan}. This film has heavy action and western influences which its latent position reveals. Another example of misclassification is the two ``action'' films \textit{The Kid (1921)} and \textit{Minnie and Moskowitz (1971)}, positioned between crimes and westerns. Their genres listed on \citet{imdb} are comedy/drama/family, and comedy/drama/romance, respectively. Neither is well-classified as an action film, and their positions reflect this, though without comic films in the data the correct positions are lost.
 
-The continuous positions from the latent space model are more precise identifiers of a movie's style than a discrete cluster label. This is also true of the journal citation network in Section \ref{Example1}. In both cases the clusters, though discernible in the plots, are irregularly shaped and blend into each other. This makes them difficult to capture through model-based clustering techniques.
-%I tried actually apllying two-group and three group cluster models to check this out. 2-group is not good (two central clusters, one with larger variance). 3-group hasn't run successfully yet on the full network and the results on the thinned network weren't very helpful. I may need to use the genres as inital labels, but I'm not sure where the argument is and then we lose the "initial label" benefit. 
-Plotting them as we have reveals how they relate to each other, going beyond what strict class labels convey. 
+The continuous positions from the latent space model are more precise identifiers of movie type than discrete cluster labels. Like the journal citation network visualized in Section \ref{Example1}, the clusters are discernible but irregularly shaped and blend into each other. The positions aid in identifying sub-genres, which may be valuable for recommendation systems. For example, the westerns that tail into the crime cluster, \textit{Unforgiven (1992)}, \textit{Tombstone(1993)}, and \textit{Dead Man (1995)} reveal a "modern western" subgenre. These films are much newer than the median year of westerns in the data (1968).
+
+If no genre labels are given the fit positions provide rich input for a clustering algorithm. To illustrate, we apply k-means clustering with three clusters which we expect to correspond roughly to the action, crime and western films (\citep{kmeans}, \citep{r}). We use pair-counting to measure accuracy, with the caveat that not all pre-assigned genres are correct, as discussed above. Films originally labeled with two genres are considered a match if assigned to either of those genres. Table \ref{class.table} compares the k-means output to pre-assigned genre labels. Of the 128 films in the network, 105 are assigned to matching labels. The most common change in classificaiton is from action to crime. The comparision is visualized in Figure \ref{fig:movie_kmeans}. Most films that switch labels are positioned near the boundary of the three classes, indicating that a single label is probably insufficient.
+
+<<movie_kmeans, cache = T, echo = F, fig.height = 3, fig.width = 7, results = "asis", fig.cap = "Film network colored by k-means class with shape determined by pre-assigned genre. Centers of the k-means classes are labeled 1-3.", dependson = c("movie_model_r"), message = F>>=
+
+library(stringr)
+
+#as.matrix(read.csv("~/Documents/citation/latent_ranking/movie_net_acwr_Z.csv")[,2:3])
+fit.Z = as.matrix(read.csv("~/Documents/citation/latent_ranking/movie_net_acwr_Z.csv")[,2:3])
+G = 3
+fit.Kr = kmeans(fit.Z, centers =  G) #no variation in fit among the algorithms
+data1 = data.frame(x = -fit.Z[,1], y = fit.Z[,2], kmeans_class = as.factor(fit.Kr$cluster), assigned_genre = as.factor(movie_net_acw_full%v%"genres"))
+data2 = data.frame(x = fit.Kr$centers[,1], y = fit.Kr$centers[,2])
+kmeans_r = ggplot(data1, aes(x = x, y = y, color = kmeans_class, shape = assigned_genre)) +
+  geom_point(size= 3) +
+    geom_point(data = data2, aes(x, y), inherit.aes = F, shape = c("1","2","3"), size = 3) + 
+  scale_color_manual(values = rainbow(G, alpha = .7)) +
+  theme_void()# + xlim(-3,3) + ylim(-2,2)
+
+fit.Z = as.matrix(read.csv("~/Documents/citation/latent_ranking/movie_net_acwh_Z.csv")[,2:3])
+G = 3
+fit.Kh = kmeans(fit.Z, centers =  G) #no variation in fit among the algorithms
+data1 = data.frame(x = fit.Z[,1], y = fit.Z[,2], kmeans_class = as.factor(fit.Kh$cluster), assigned_genre = as.factor(movie_net_acw_full%v%"genres"))
+names(data1)[3:4] = c("k-means class", "assigned genre")
+data2 = data.frame(x = fit.Kh$centers[,1], y = fit.Kh$centers[,2])
+kmeans_h = ggplot(data1, aes(x = x, y = y, color = `k-means class`, shape = `assigned genre`)) +
+  geom_point(size= 3) +
+    geom_point(data = data2, aes(x, y), inherit.aes = F, shape = c("1","2","3"), size = 5) + 
+  scale_color_manual(values = rainbow(G, alpha = .7)[c(1,2,3)]) +
+  theme_void() + 
+  theme(legend.text = element_text(size = 10), legend.title = element_text(size = 10))
+
+kmeans_h
+
+# pair counting
+# let Action|Crime match action or crime. let Action|Western match action or wester
+# see which matches which
+kmeans.labels = as.factor(fit.Kh$cluster)
+assigned.group  = aggregate(fit.Z, by = list(movie_net_acw_full%v%"genres"), mean)[c(1,4,5),]
+kmeans.group = aggregate(fit.Z, by = list(kmeans.labels), mean)
+assigned.group = assigned.group[order(assigned.group[,1])] #inspect this visually
+levels(kmeans.labels) = assigned.group$Group.1[rank(-kmeans.group$V1)]
+#sum(is.na(str_match(kmeans.labels, movie_net_acw_full%v%"genres")))
+#table((movie_net_acw_full%v%"genres")[is.na(str_match(kmeans.labels, movie_net_acw_full%v%"genres"))])
+table1 = t(table(kmeans.labels, movie_net_acw_full%v%"genres"))
+print(xtable(table1[,c(2,1,3)], caption = "Classification of films by pre-assigned genres (row) vs. k-means cluster (column)", digits = 0, label = "class.table"))
+
+# westerns by year
+west_years = sort(sapply((movie_net_acw_full%v%"titles")[movie_net_acw_full%v%"genres"=="Western"], str_extract, "[0-9]{4}"))
+crime_years = sort(sapply((movie_net_acw_full%v%"titles")[movie_net_acw_full%v%"genres"=="Crime"], str_extract, "[0-9]{4}"))
+action_years = sort(sapply((movie_net_acw_full%v%"titles")[movie_net_acw_full%v%"genres"=="Action"], str_extract, "[0-9]{4}+"))
+#median(as.numeric(west_years)); median(as.numeric(crime_years)); median(as.numeric(action_years)); 
+
+@
+
+%I tried  applying two-group and three group cluster models in latentnet. 2-group is not good (two central clusters, one with larger variance). 3-group hasn't run successfully yet on the full network and the results on the thinned network weren't very helpful. I may need to use the genres as inital labels, but would lose the "initial label" benefit. 
+
+<<group_models, eval = F, echo = F>>=
+#Even with initial postions the cluster model returns error.
+latent_acw3 = ergmm(movie_net_acw_full ~ euclidean(d=2, G = 3) + rreceiver + rsender, 
+             response = "ratings_diff", family = "Poisson.log", tofit = "mle",
+             prior = ergmm.prior(Z.k = fit.K$cluster, Z.mean = fit.K$centers,
+                                 Z.var = rep(.5,3)),
+             control = control.ergmm(pilot.runs = 4,  burnin = 500000, 
+             interval = 500, sample.size = 5000), seed = 123, verbose = 3)
+=plot(latent_acw3$burnin.start$mkl$Z)
+@
+
 
 << pagerank_movie, eval = F, cache = T, echo = F, results = 'hide', dependson = c("setup", "setup_jrss", "pagerank", "movie_data"), fig.keep = 'none', message = F, warning = F>>=
 
 # apply page rank ####
-
-movie.page.rank = page.rank(acw_igraph, damping = .95)$vector
+acw_igraph = igraph::graph.adjacency(acw_mat, weighted=T)
+#acw_igraph = igraph::graph.adjacency(log(acw_mat+1), weighted=T) <- stronger correlation with starts if take log first
+movie.page.rank = igraph::page.rank(acw_igraph, damping = .95)$vector
 
 # compare results to other ranks ####
 
 ## points in
-cor(movie.page.rank, colSums(movie_rating_acw)) #.92
+cor(movie.page.rank, colSums(movie_rating_acw)) #.845
 
 ## to cited/citing ratio (cited is points in)
-cor(movie.page.rank, colSums(movie_rating_acw)/rowSums(movie_rating_acw)) #.958 - better when normalized
-#cor(vc.acw, colSums(movie_rating_acw)/rowSums(movie_rating_acw)) #.44
+cor(movie.page.rank, colSums(movie_rating_acw)/rowSums(movie_rating_acw), use = "complete.obs") #.871 - better when normalized
 
 ## number of ratings
-cor(movie.page.rank, movie_net_acw%v%"counts") #.68
+cor(movie.page.rank, movie_net_acw%v%"counts") #.64
 plot(movie.page.rank, movie_net_acw%v%"counts", pch = "x")
+cor(movie.page.rank, movie_net_acw%v%"stars") #.64
+plot(movie.page.rank, movie_net_acw%v%"stars", pch = "x")
+#text(movie.page.rank, movie_net_acw%v%"stars", labels = movie_net_acw%v%"titles", cex = .5, srt = 90)
 
 ### latent ranking scores
-cor(movie.page.rank, vc.acw)
-plot(movie.page.rank, vc.acw, type = "n", ylim = c(-4,6))
-text(labels = movie_net_acw%v%"vertex.names", movie.page.rank, vc.acw, cex = .5, srt = 90)
+cor(movie.page.rank, vc.acw) #.66
+plot(movie.page.rank, vc.acw, type = "n")
+text(labels = movie_net_acw%v%"titles", movie.page.rank, vc.acw, cex = .5, srt = 90)
 
-# takeaway: most page ranks extremely small (this would be good in search results)
+# takeaway: most page ranks extremely small (this is probably desiriable in web search results, but not here)
 
 @
+
+% collaborative filtering to generate individualized network plots?
 
 \section{Discussion}\label{Discussion}
 
