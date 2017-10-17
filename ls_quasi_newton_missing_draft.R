@@ -1,21 +1,4 @@
-# quick quasi-Newton for Latent Space Ranking Model
-#
-# make sure diag of Y is 0 if not counting self-edges
-#
-# Implementation notes/questions:
-#    better to update after each z or all z's at once? (seems better all z's at once, i.e. simultaneous updates, they all move from old z location together)
-#    stata j sometimes sneaking away. probably because it has far lowest citation count
-#    likelihood levels off after certain #runs, why? yet in terms of correlation to mcmc value fit may be getting better
-#    improve ad-hoc tuning/Z search to be more dynamic for any input data set
-#    Bayesian priors mean we shouldn't have to center paramters, but could it speed fitting?
-#      without bayesian, non-identifiability between sender, receiver, beta (+- constant)
-#    how sensitivite to hyperpriors? 
-#    note behavior of low connectivity nodes, e.g. if something only sends to 1 other things in network,
-#       positions aren't reliable, can tail away from rest of nodes and make visualization worse
-#       it's sender and/or receiver coef is conflated with position#
-# To DO: 
-#    Allow for different variances for z's in different dimensions? Seems realistic.
-#    Long term: write the *binomial* quasi-Newton algo
+# partial work on lsqn for graphs with missing edges
 
 # library ####
 library(ergm)
@@ -31,72 +14,10 @@ library(gtools) #for logit function
 #    [removed] family = poisson.c fits a constricted poisson position model (T_ij = ~Y_ij + ~Y_ji) by fitting upper tri and letting lower tri be the remainder. Note this is odd because it doesn't demand that E(Cij) = T - E(Cji) given the parameters (positions + random effects + intercept), just that E(C_ji) is a reminder not a glm prediction. This also means the last sender param has no info.  
 #              better way to do this with penalty for missing the total instread of sharp constraint (which probably can't be realized )]
 
-llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
-                 Z=NULL, sender.var = 10, receiver.var = 10, Z.var = 10,
-                 beta.var = 9, sender.var.df = 3, receiver.var.df = 3, Z.var.df = NULL, #N = number of nodes
-                 prior.sender.var = 1, prior.receiver.var = 1, prior.Z.var = NULL,
-                 est = "MAP", family = "poisson") {
-  
-       if(is.null(Y)) {Y = object$model$Ym}
-       if(is.null(Z)) {Z = object$Z}
-       if(is.null(sender)) {sender = object$sender}
-       if(is.null(receiver)) {receiver = object$receiver}
-       if(is.null(beta)) {beta = object$beta}
-       N = nrow(Y) 
-       if(is.null(Z.var.df)) {Z.var.df = sqrt(N)}
-       if(is.null(prior.Z.var)) { prior.Z.var = N/8}
-       
-       if(!is.null(object$sender.var)) sender.var = object$sender.var
-       if(!is.null(object$receiver.var)) receiver.var = object$receiver.var
-       if(!is.null(object$Z.var)) Z.var = object$Z.var
-       if(!is.null(object$beta.var)) beta.var = object$beta.var
-       
-       Z_dist = as.matrix(dist(Z, upper = T))
-       l_lambda = t(receiver + t(sender - Z_dist)) + beta; 
-    
-       if (family == "poisson") {
-          lgamma.constant = sum(lgamma(as.vector(Y+1)), na.rm = T) 
-          lambda = exp(l_lambda); diag(lambda) = 0
-          pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
-       }
-       
-       # if (family == "poisson.c") {
-       #   lambda = exp(l_lambda); diag(lambda) = 0
-       #   Tmatrix = Y + t(Y); diag(Tmatrix) = 0
-       #   lambda[lambda > Tmatrix] = Tmatrix[lambda > Tmatrix]
-       #   lambda[lower.tri(lambda)] = (Tmatrix - t(lambda))[lower.tri(lambda)]
-       #   l_lambda = log(lambda); diag(l_lambda) = NA
-       #   pY = sum( Y * l_lambda - lambda, na.rm = T)
-       # }
-       
-       if (family == "binomial") {
-        lambda = inv.logit(l_lambda)
-        Yt = Y + t(Y); diag(Yt) =  0
-        pY =  sum( Y * log(lambda), na.rm = T) + sum((Yt - Y)*log(1-lambda), na.rm = T)
-        }   
-       
-       if (est == "Y") {return(pY)}
-    
-       ptheta = log(exp(-beta^2/(2*beta.var)) / sqrt(2*pi*beta.var)) +
-                 sum(log(exp(-sender^2/(2*sender.var)) / sqrt(2*pi*sender.var))) + 
-                 sum(log(exp(-receiver^2/(2*receiver.var)) / sqrt(2*pi*receiver.var))) +
-                 sum(log(exp(-Z^2/(2*Z.var)) / sqrt(2*pi*Z.var))) +
-                 log(dinvchisq(sender.var, sender.var.df, prior.sender.var)) + 
-                 log(dinvchisq(receiver.var, receiver.var.df, prior.receiver.var)) + 
-                 log(dinvchisq(Z.var, Z.var.df, prior.Z.var))
-       
-       if (est == "theta") {return(ptheta)}
-       
-       map = pY + ptheta # = p(Y|theta) + p(theta)
-       
-       if (est == "MAP") {return(map)}
-
-}
-
 
 # quasi-Netwon ####
 
-lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = number of nodes
+lsqn.missing <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = number of nodes
                  # hyperparameters - using defaults from ergmm
                  v_a = 3, v_b = 3, v_z = sqrt(N),
                  s2_a = 1, s2_b = 1, s2_z = N/8,
@@ -112,7 +33,6 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                  jmax = 50, epsilon = 1e-10) {
     
     r = 0
-    if (noSelfEdges) {diag(Y) = 0}
     while (r <= runs) {
     while (r == 0) {
   
@@ -141,11 +61,11 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
       
       # latentnet type initialization
       if (RE.init == "latentnet") {
-        a = logit( (rowSums(Y!=0) + 1)/(N-1+2) ) - (1/N) * sum(logit( (rowSums(Y!=0) + 1) / (N - 1 + 2)) )
-        b = logit( (colSums(Y!=0) + 1)/(N-1+2) ) - (1/N) * sum(logit( (colSums(Y!=0) + 1) / (N - 1 + 2)) )
+        a = logit( (rowSums(Y!=0, na.rm = T) + 1)/(N-1+2) ) - (1/N) * sum(logit( (rowSums(Y!=0, na.rm = T) + 1) / (N - 1 + 2)) )
+        b = logit( (colSums(Y!=0, na.rm = T) + 1)/(N-1+2) ) - (1/N) * sum(logit( (colSums(Y!=0, na.rm = T) + 1) / (N - 1 + 2)) )
         sigma2_a = var(a)
         sigma2_b = var(b)
-        B = ( 1/(N*(N-1)) * sum(Y>mean(Y)) + mean(Z_dist))
+        B = ( 1/(N*(N-1)) * sum(Y>mean(Y), na.rm = T) + mean(Z_dist))
         sigma2_z = var(as.vector(z))
       } else {
           if (!is.null(user.start$sender)) {a = user.start$sender} else {a = rnorm(N)}
@@ -159,8 +79,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
       r = r+1
   
     }
-    #print(r)
-    
+
     # Update  Z, sigma2_z, B, a, sigma2_a, b, sigma2_b  ####
     # sigma updates are closed form. Others by coordinate ascent
 
@@ -179,16 +98,16 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
       tmp2 = dist_inv * exp_term
     
     #first deriv wrt z_id:
-    diff_z =  sapply(1:N, function(i) {colSums(tmp2[i,]*zid_zjd[[i]])}) - #d x N
-              sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])}) - #d x N
+    diff_z =  sapply(1:N, function(i) {colSums(tmp2[i,]*zid_zjd[[i]], na.rm = T)}) - #d x N
+              sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]], na.rm = T)}) - #d x N
               z/sigma2_z # d x N
       
     zsign = sign(diff_z)   
     
     #second deriv wrt z_id:
     tmp3 = dist_inv^(3) * (yij_yji  - exp_term*(1 + Z_dist))
-    diff_z2 = t(t(sapply(1:N, function(i) {colSums(tmp3[i,]*(zid_zjd[[i]])^2)})) + #N x d
-              colSums(dist_inv * (-yij_yji + exp_term)) #N, added to above by column
+    diff_z2 = t(t(sapply(1:N, function(i) {colSums(tmp3[i,]*(zid_zjd[[i]])^2, na.rm = T)})) + #N x d
+              colSums(dist_inv * (-yij_yji + exp_term), na.rm = T) #N, added to above by column
               - 1/sigma2_z)
       
     zsign2 = sign(diff_z2)   
@@ -205,19 +124,19 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                     tmpdist = sqrt(colSums((znew_i - t(Z))^2)); if (noSelfEdges) {tmpdist[i] = 1}
                     
                     #recalculate zdiff for that zid
-                    diff_z[d,i] = - sum(yij_yji[i,] * 1/tmpdist * (znew_i[d] - Z[,d])) +
+                    diff_z[d,i] = - sum(yij_yji[i,] * 1/tmpdist * (znew_i[d] - Z[,d]), na.rm  = T) +
                                   sum(1/tmpdist * (znew_i[d] - Z[,d]) * 
-                                  (exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist))) -
+                                  (exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist)), na.rm = T) -
                                   znew_i[d]/sigma2_z #yij_yji is zero if i = j so don't worry about Z not updated to znew on that line
                     #compre to z orig, did we cross a 0?
                     if (!is.na(diff_z[d,i]) && sign(diff_z[d,i]) != zsign[d,i]) {
                       s = z[d,i] + seq(0, 1, length.out = 11) * stepsize.z[d,i]*zsign[d,i]*-zsign2[d,i]
                       tmpdiff = sapply(s, function(x) {
                         znew_i[d]= x
-                        tmpdist = sqrt(colSums((znew_i - t(Z))^2)); if (noSelfEdges) {tmpdist[i] = 1}
-                        return(- sum(yij_yji[i,] * 1/tmpdist * (znew_i[d] - Z[,d])) +
+                        tmpdist = sqrt(colSums((znew_i - t(Z))^2, na.rm = T)); if (noSelfEdges) {tmpdist[i] = 1}
+                        return(- sum(yij_yji[i,] * 1/tmpdist * (znew_i[d] - Z[,d]), na.rm = T) +
                                  sum(1/tmpdist * (znew_i[d] - Z[,d]) * 
-                                       (exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist))) -
+                                       (exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist)), na.rm = T) -
                                  znew_i[d]/sigma2_z)})
                       #update lower case z (not upper case Z yet)
                       z[d,i] = s[which.max(sign(tmpdiff)!=zsign[d,i])]
@@ -227,12 +146,12 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                       diff_z[d,i] = tmpdiff[which.max(sign(tmpdiff)!=zsign[d,i])]
                       zsign[d,i] = sign(diff_z[d,i]) 
                       znew_i = z[,i]
-                      tmpdist = sqrt(colSums((znew_i - t(Z))^2)); if (noSelfEdges) {tmpdist[i] = 1}
+                      tmpdist = sqrt(colSums((znew_i - t(Z))^2, na.rm = T)); if (noSelfEdges) {tmpdist[i] = 1}
                       tmpexp = exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist)
                       tmpexp[i] = 0
                       tmp4 = 1/tmpdist^(3) * (yij_yji[i,]  - tmpexp*(1 + tmpdist))
-                      diff_z2[d,i] = sum(tmp4*(znew_i[d] - t(Z)[d,])^2) +
-                        sum(1/tmpdist * (-yij_yji[i,] + tmpexp)) - 1/sigma2_z
+                      diff_z2[d,i] = sum(tmp4*(znew_i[d] - t(Z)[d,])^2, na.rm = T) +
+                        sum(1/tmpdist * (-yij_yji[i,] + tmpexp), na.rm = T) - 1/sigma2_z
                       zsign2[d,i] = sign(diff_z2[d,i]) 
                     } else {
                       if (stepsize.z[d,i] <= max(abs(z))) { stepsize.z[d,i] = stepsize.z[d,i] * 2
@@ -243,10 +162,10 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                         s = s[-51]
                         tmpdiff = sapply(s, function(x) {
                           znew_i[d]= x
-                          tmpdist = sqrt(colSums((znew_i - t(Z))^2)); if (noSelfEdges) {tmpdist[i] = 1}
-                          return(- sum(yij_yji[i,] * 1/tmpdist * (znew_i[d] - Z[,d])) +
+                          tmpdist = sqrt(colSums((znew_i - t(Z))^2, na.rm = T)); if (noSelfEdges) {tmpdist[i] = 1}
+                          return(- sum(yij_yji[i,] * 1/tmpdist * (znew_i[d] - Z[,d]), na.rm = T) +
                                    sum(1/tmpdist * (znew_i[d] - Z[,d]) * 
-                                         (exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist))) -
+                                         (exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist)), na.rm = T) -
                                    znew_i[d]/sigma2_z)})
                         
                         stepsize.z[d,i] = abs(s[which.min(abs(tmpdiff))] - z[d,i]) #don't let it pick itself
@@ -254,12 +173,12 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                         diff_z[d,i] = tmpdiff[which.min(abs(tmpdiff))]
                         zsign[d,i] = sign(diff_z[d,i]) 
                         znew_i = z[,i]
-                        tmpdist = sqrt(colSums((znew_i - t(Z))^2)); if (noSelfEdges) {tmpdist[i] = 1}
+                        tmpdist = sqrt(colSums((znew_i - t(Z))^2, na.rm = T)); if (noSelfEdges) {tmpdist[i] = 1}
                         tmpexp = exp(B + a[i] + b - tmpdist) + exp(B + a + b[i] - tmpdist)
                         tmpexp[i] = 0
                         tmp4 = 1/tmpdist^(3) * (yij_yji[i,]  - tmpexp*(1 + tmpdist))
-                        diff_z2[d,i] = sum(tmp4*(znew_i[d] - t(Z)[d,])^2) +
-                          sum(1/tmpdist * (-yij_yji[i,] + tmpexp)) - 1/sigma2_z
+                        diff_z2[d,i] = sum(tmp4*(znew_i[d] - t(Z)[d,])^2, na.rm = T) +
+                          sum(1/tmpdist * (-yij_yji[i,] + tmpexp), na.rm = T) - 1/sigma2_z
                         zsign2[d,i] = sign(diff_z2[d,i]) 
                       }
                     }
@@ -282,7 +201,8 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
     diag(lambdamat) = diag(lambdamat)*(1-noSelfEdges)
     lambdamat[is.na(Y)] = NA
     
-    diff_B = sum( Y - lambdamat) - B/sigma2_B #in
+    diff_B = sum( Y - lambdamat, na.rm = T) - B/sigma2_B #in
+    print(r)
     #second deriv always negative -> concave
     Bsign = sign(diff_B)
     
@@ -291,13 +211,14 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
       lambdamat = exp(sweep(t(b - Z_dist + Bnew), 1, a, "+"))
       diag(lambdamat) = diag(lambdamat)*(1-noSelfEdges)
       lambdamat[is.na(Y)] = NA
-      diff_B = sum( Y - lambdamat) - Bnew/sigma2_B
+      diff_B = sum( Y - lambdamat, na.rm = T) - Bnew/sigma2_B
       if (sign(diff_B) != Bsign) { #look in this range
         s = B + seq(0, 1, length.out = 11) * stepsize.B*Bsign
         tmp = sapply(s, function(B) {
           lambdamat = exp(sweep(t(b - Z_dist + B), 1, a, "+"))
           diag(lambdamat) = diag(lambdamat)*(1-noSelfEdges)
-          sum( Y - lambdamat) - B/sigma2_B
+          lambdamat[is.na(Y)] = NA
+          sum( Y - lambdamat, na.rm = T) - B/sigma2_B
         })
         B = s[which.max(sign(tmp)!=Bsign)]
         stepsize.B = stepsize.B/10
@@ -311,7 +232,8 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
     stepsize.a = rep(stepsize.init.a, N)
     lambdamat = exp(sweep(t(b - Z_dist + B), 1, a, "+"))
     diag(lambdamat) = diag(lambdamat)*(1-noSelfEdges)
-    diff_a = rowSums(Y) - rowSums(lambdamat) + - a/sigma2_a #i,j entry is i to j
+    lambdamat[is.na(Y)] = NA
+    diff_a = rowSums(Y, na.rm = T) - rowSums(lambdamat, na.rm = T) + - a/sigma2_a #i,j entry is i to j
     asign = sign(diff_a)
     
     #go
@@ -322,19 +244,24 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
           lambdavec = exp(B + anew + b - Z_dist[i,])
           lambdavec[i] = lambdavec[i]*(1-noSelfEdges) #if necessary, remove self edge
           lambdavec[is.na(Y[i,])] = NA #remove missing edges
-          diff_a[i] = sum( Y[i,]) - sum(lambdavec) - anew/sigma2_a
+          diff_a[i] = sum( Y[i,], na.rm = T) -
+            sum(lambdavec, na.rm = T) - 
+            anew/sigma2_a
+          cat("diff_ai", diff_a[i], "\n")
           if (sign(diff_a[i]) != asign[i]) {
             s = a[i] + seq(0, 1, length.out = 11) * stepsize.a[i]*asign[i]
-            tmp = sum( Y[i,]) - sapply(s, function(a) {
+            tmp = sum( Y[i,], na.rm = T) - 
+                sapply(s, function(a) {
                   lambda = exp(B + a + b - Z_dist[i,])
                   if (noSelfEdges) {lambda[i] = 0}
-                  return( sum(lambda) + a/sigma2_a)
+                  return( sum(lambda[!is.na(Y[i,])]) + a/sigma2_a)
                   })
             a[i] = s[which.max(sign(tmp)!=asign[i])]
             stepsize.a[i] = stepsize.a[i]/10
             diff_a[i] = tmp[which.max(sign(tmp)!=asign[i])]
             asign[i] = sign(diff_a[i])
           } else {stepsize.a[i] = stepsize.a[i] * 2}
+          print(stepsize.a[i])
         }
       }
     }
@@ -348,7 +275,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
     lambdamat = exp(sweep(t(b - Z_dist + B), 1, a, "+"))
     diag(lambdamat) = diag(lambdamat)*(1-noSelfEdges)
     lambdamat[is.na(Y)] = NA
-    diff_b = colSums(Y) - colSums(lambdamat) - b/sigma2_b #i,j entry is i to j
+    diff_b = colSums(Y, na.rm = T) - colSums(lambdamat, na.rm = T) - b/sigma2_b #i,j entry is i to j
     bsign = sign(diff_b)
     
     #go
@@ -357,14 +284,18 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
         while (abs(diff_b[i]) > tol) {
           bnew = b[i] + stepsize.b[i]*bsign[i]
           lambdavec = exp(B + bnew + a - Z_dist[,i])
-          lambdavec[i] = lambdavec[i]*(1-noSelfEdges) #if necessary, remove self edge
-          diff_b[i] = sum(Y[,i]) - sum(lambdavec) - bnew/sigma2_b
+          lambdavec[i] = lambdavec[i] - lambdavec[i]*noSelfEdges #if necessary, remove self edge
+          lambdavec[is.na(Y[,i])] = NA #remove missing edges
+          diff_b[i] = sum( Y[,i], na.rm = T) -
+            sum(lambdavec, na.rm = T) - 
+            bnew/sigma2_b
           if (sign(diff_b[i]) != bsign[i]) {
             s = b[i] + seq(0, 1, length.out = 11) * stepsize.b[i]*bsign[i]
-            tmp = sum( Y[,i] ) - sapply(s, function(b) {
+            tmp = sum( Y[,i], na.rm = T) - 
+              sapply(s, function(b) {
                 lambda = exp(B + a + b - Z_dist[i,])
                 if (noSelfEdges) {lambda[i] = 0}
-                return( sum(lambda) + b/sigma2_b)
+                return( sum(lambda[!is.na(Y[,i])]) + b/sigma2_b)
               })
             b[i] = s[which.max(sign(tmp)!=bsign[i])]
             stepsize.b[i] = stepsize.b[i]/10
@@ -408,22 +339,4 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
                 prior = list(beta.var = sigma2_B, sender.var.df = v_a, receiver.var.df = v_b, Z.var.df = v_z, 
                              prior.sender.var = s2_a, prior.receiver.var = s2_b, prior.Z.var = s2_z))
       )
-}
-
-
-# predict network based on quasi-Newton fit
-# either based on point estimate (non-random) or random draw|MAP
-predict.lsqn <-function(model, type = "Y", names = NULL) {
-  N = nrow(model$map$Z)
-  Z_dist = as.matrix(dist(model$map$Z, upper = TRUE), N, N)
-  lambda = exp(t(model$map$receiver + t(model$map$sender - Z_dist)) + model$map$beta); diag(lambda) = NA
-  if (!is.null(names)) {row.names(lambda) = names}
-  if (type == "Y") return(lambda) else {
-    if (type == "rpois") {
-      if (!is.null(names)) {row.names(lambda) = names}
-        return(matrix(rpois(N^2, lambda), N, N))
-    }
-      
-  }
-  
 }
