@@ -45,7 +45,7 @@ Applications to Journal and Film Rating}
 
 \abstract{We introduce a method for rating items based on network data or incomplete pairwise comparison data, employing the latent space network models developed by \citet{hoff02}, \citet{hoff03} and \citet{krivitskyetal09}. Our model estimates positions of items in latent space, along with individualized sender and receiver coefficients that capture powers of transmission for each item. Ratings are derived from the difference in sender and receiver coefficients. The method is ideal for items with nebulous similarities which can exert a range of influences on the strength of ties. Unlike existing rating methods, the latent space network model provides both a measure of uncertainty in estimates and meaningful visualization.
 
-We show that quasi-Newton estimation methods for this model produce results on par with commonly used MCMC methods in a fraction of the time. In particular, we develop a quasi-Newton algorithm  for this problem which performs well in applications. This extends the practical use of the latent space ranking method and of a class of latent space network models more generally. We present two applications. First, we rank statistics journals and show how the method addresses weaknesses of existing ranking methods. Second, we formulate movie ratings for films of several genres and demonstrate the use of latent space positions for genre detection. Our method is implemented in \proglang{R}, using the packages \pkg{latentnet} \citep{latentnet} and \pkg{visNetwork} \citep{visNetwork}}, and supplementary code which is provided. 
+We show that quasi-Newton estimation produces results on par with commonly used MCMC methods in a fraction of the time. This extends the practical use of the latent space ranking method and of the class of latent space network models more generally. We present two applications. First, we rank statistics journals and show how the method addresses weaknesses of existing ranking methods. Second, we formulate movie ratings for films of several genres and demonstrate the use of latent space positions for genre detection. Our method is implemented in \proglang{R}, using the packages \pkg{latentnet} \citep{latentnet} and \pkg{visNetwork} \citep{visNetwork}}, and supplementary code which is provided. 
 
 \newpage
 
@@ -122,14 +122,14 @@ We consider $a_i$ and $b_j$ to be node-specific sender and receiver effects. $\l
 
 Adapting machinery of the generalized linear model (GLM), let
 
-\begin{equation}\label{eq3}
-E(y_{ij}) = g^{-1}(\eta_{ij}),\text{ where }\eta_{ij} = \beta' x_{ij} - \lVert z_i - z_j \rVert + a_i + b_j.
-\end{equation}
+\begin{align}\label{eq3} 
+E(y_{ij}) &= g^{-1}(\eta_{ij})\\
+\eta_{ij} &= \beta' x_{ij} + a_i + b_j - \lVert z_i - z_j \rVert.
+\end{align}
 
-\noindent In the context of our applications, we assume $y_{ij}$ is Poisson distributed and let $g$ be the standard log link function. In some cases other distributions may be more appropriate, but here we use the Poisson because we are dealing with count data. (A binomial model with constant trials and a Bernoulli model for binary networks can also be implemented in \pkg{latentnet}.) This is in contrast to the binomial distributions of edge weights in the quasi-Stigler model described in Section~\ref{QS}. Unlike the quasi-Stigler model the estimates are not conditioned on the total weight of each dyad ($y_{ij} + y_{ji}$). 
+\noindent In the context of our applications, we assume $y_{ij}$ is Poisson distributed and let $g$ be the standard log link function. In some cases other distributions may be more appropriate, but here we use the Poisson because we are dealing with count data. This is in contrast to the binomial distributions of edge weights in the quasi-Stigler model described in Section~\ref{QS}. Unlike the quasi-Stigler model the estimates are not conditioned on the total weight of each dyad ($y_{ij} + y_{ji}$). 
 
-% latentnet doesn't allow for a unique number of trials in a binomial distribution on each node, but I may code that eventually and add to latentnet. Wouldn't fix dyad totals like quasi-Stigler though, so the interpretation wouldn't exactly make sense in context.
-% Could also use optim to get a quick estimate with binomial likelihood.
+% latentnet doesn't allow for a unique number of trials in a binomial distribution on each edge, but you can use optim to get a quick estimate with binomial likelihood. Fixing dyad totals basically nullifies the positions though.
 
 We note some features of the model:
 
@@ -137,7 +137,7 @@ We note some features of the model:
 
 \item Increasing distance between $z_i$ and $z_j$ implies decreasing expectation of $y_{ij}$. One way to view this is as controlling for similarity between nodes. Nodes with salient similarities are likely to have fitted positions relatively close together. Some of the magnitude of their connection is attributable to their similarly, and the rest to their individual sender ("push") and receiver ("pull") effects.
 
-\item The effect of positions on expected edge weights is symmetric, affecting both edges in a dyad equally. Positions influence the model via the total dyad weight. To condition on the total weight, as in the quasi-Stigler model, eliminates the value of estimated positions.
+\item The effect of positions on expected edge weights is symmetric, affecting both edges in a dyad equally. Positions influence the model via the total dyad weight. To condition on the total weight, as in the quasi-Stigler model, effectively eliminates the value of estimated positions.
 
 \item The \textit{rating} or \textit{score} of node $i$ is its receiver minus sender coefficient,
 
@@ -151,9 +151,9 @@ Its \textit{rank} is derived from its order among the ratings.
 
 \subsection{Parameter Estimation}\label{Parameter Estimation}
 
-In this section we discuss two methods of parameter estimation for the latent space model. The first is a Markov chain Monte Carlo method of the type employed previously (see \citet{hoff02}, \citet{hoff03} and \citet{krivitskyetal09}, for example). The second is a quasi-Newton algorithm we have developed for this model. Both methods embed the model in a Bayesian framework and may use the same parameter initialization, but the update methods differ. We discuss first the overlapping aspects of the two methods, and then the particular aspects of each method in subsections \ref{MCMC} and \ref{QN}. 
+With the introduction of latent space network models, \citet{hoff02} developed a stochastic Markov chain Monte Carlo (MCMC) estimation algorithm. \citet{hoff03} added the capacity to fit random effects, and \citet{krivitskyetal09} extended the model further and refined the underlying algorithm. In this section we present an overview of the MCMC estimation described by those authors, adapted for the latent space rating model and embellished with details from the \pkg{latentnet} implementation \citep{latentnet_jss, latentnet}. We conclude by discussing previous use of quasi-Netwon estimation and tradeoffs between this strategy and MCMC.
 
-Both estimation methods embed the model in the same Bayesian framework with corresponding dependence structure. The aim is to maximize the posterior distribution of the parameters, $P(\theta|Y) \propto P(Y|\theta)P(\theta)$. We adapt Equation \ref{eq1} for the case when the random effects are as described in (\ref{eq2}), and our only nodal covariate is the intercept term, $B_0$.
+First, we describe the Bayesian framework and initialization method. This applies to both MCMC estimation and direct optimization by a quasi-Newton method. Our aim is to return a sample from the posterior parameter distribution and desired point estimates, such as a maximum likelihood estimate, posterior mean and mode. We adapt Equation \ref{eq1} for the case when the random effects are as described in (\ref{eq2}), and our only nodal covariate is the intercept term, $B_0$.
 
 \begin{equation}\label{eq4}
 P(\theta|Y) \propto P(Y|\theta)P(\theta) = \prod_{i\neq j} P(y_{ij}|\beta_0, z_i, z_j, a_i, b_j)P(\theta).
@@ -192,7 +192,7 @@ $$\sigma_z^2 \sim \text{Scale-inv-}\chi^2 (v_z, s^2_z))$$ %ergmm determined by d
 
 
 The estimation algorithm of \pkg{latentnet} sets default values for the hyperparameters to generate diffuse distributions on the prior parameters. The default value for $\sigma_\beta^2$ is $9$ to allow a wide range of $\beta$ values.   %hoff03 uses 100. Is wider better? 
-Low degrees of freedom ($v_a$ = $v_b$ = $3$) reflect uncertainty in the values of $\sigma_a^2$ and $\sigma_b^2$, while the default scale parameters ($s^2_a$ = $s^2_b$ = $1$) curtail them to a wide but reasonable range. The default values for $v_z$ and $s^2_z$ are $\sqrt{n}$ and $\frac{1}{8}\sqrt[\leftroot{-3}\uproot{3}d/2]{n}$. These values reflect that larger networks tend to take up more space, but as observed network size increases the influence of prior variance should decline. For discussion of the choice of hyperparameters see \citet{krivitskyetal09} and \citet{latentnet_jss}. We employ the same default values for our quasi-Newton algorithm. These values are fixed throughout the estimation process. %these defaults assume no clusters in the model
+Low degrees of freedom ($v_a$ = $v_b$ = $3$) reflect uncertainty in the values of $\sigma_a^2$ and $\sigma_b^2$, while the default scale parameters ($s^2_a$ = $s^2_b$ = $1$) curtail them to a wide but reasonable range. The default values for $v_z$ and $s^2_z$ are $\sqrt{n}$ and $\frac{1}{8}\sqrt[\leftroot{-3}\uproot{3}d/2]{n}$. These values reflect that larger networks tend to take up more space, but as observed network size increases the influence of prior variance should decline. For discussion of the choice of hyperparameters see \citet{krivitskyetal09} and \citet{latentnet_jss}. These values are fixed throughout the estimation process. %these defaults assume no clusters in the model
 
 <<r more_prior_notes, eval = F, echo = F, warning = F, message= F>>=
 #InitErgmm.euclidean<-function(model, d, G=0, var.mul=1/8, var=NULL, var.df.mul=1, var.df=NULL, mean.var.mul=2, mean.var=NULL, pK.mul=1, pK=NULL)
@@ -217,64 +217,35 @@ Low degrees of freedom ($v_a$ = $v_b$ = $3$) reflect uncertainty in the values o
 #DEFAULT:  1 * sqrt(#vertices)/max(1,#clusters)
 @
 
-Both estimation methods described below require us to supply or generate initial parameter values. The default initializations for MCMC estimation, as implemented in \pkg{latentnet}, are functions of the observed network. This may speed convergence in some cases, but in our applications in low dimension we find that random initialization can perform as well or better. Our quasi-Newton method employs random initialization on a reasonable scale, without loss of speed or performance. \newline
-
-\emph{MCMC Initialization}:
+We must supply initial parameter values. Below we list the default initializations implemented in \pkg{latentnet}. They are functions of the observed network. While they may speed convergence in some cases, in our applications in low dimension we found that random initialization on a reasonable scale performs as well or better. \newline
 
 \begin{itemize}
-\item $z^{(0)}$: The positions are initialized through either multidimensional scaling (MDS) or normal draws. In the former, the geodesic distances for all dyads are computed from the binary adjacency matrix $Y_b$. Disconnected pairs are given distances of $n$. The initial value $z^{(0)}$ is then computed by multidimensional scaling, returning optimal $d$-dimensional coordinates whose Euclidean distances best approximate the geodesic distances between nodes. In the latter, $z^{(0)}$ is generated via independent draws from a normal distribution. \citet{hoff02} noted that the choice of initialization does not impact their results. 
+\item[] $z^{(0)}$: The positions are initialized through either multidimensional scaling (MDS) or normal draws. In the former, the geodesic distances for all dyads are computed from the binary adjacency matrix $Y_b$. Disconnected pairs are given distances of $n$. The initial value $z^{(0)}$ is then computed by multidimensional scaling, returning optimal $d$-dimensional coordinates whose Euclidean distances best approximate the geodesic distances between nodes. In the latter, $z^{(0)}$ is generated via independent draws from a normal distribution. \citet{hoff02} noted that the choice of initialization does not impact their results. We found that the scale of the initial positions was more important than the values, with preference for smaller starting values.
 
-\item $\displaystyle \sigma_z^{2(0)} = var(z^{(0)})$
-
-\item $\displaystyle a_i^{(0)} =  logit \left( \frac{Y_{b_{i \cdot}}  + 1}{n - 1 + 2} \right) - \frac{1}{n}\sum_{j=1}^{n} logit \left( \frac{Y_{b_{i \cdot}} + 1}{n - 1 + 2} \right)$
+\item[] $\displaystyle a_i^{(0)} =  logit \left( \frac{Y_{b_{i \cdot}}  + 1}{n - 1 + 2} \right) - \frac{1}{n}\sum_{j=1}^{n} logit \left( \frac{Y_{b_{i \cdot}} + 1}{n - 1 + 2} \right)$
 
 The initialization of sender parameters shown above is derived by considering initial nodal degrees as binomially distributed with $n-1$ trials, observed success probability $\frac{Y_{b_{i \cdot}}}{n-1}$, and a uniform prior on success probability. As a reminder, $Y_b$ denotes the binary adjacency matrix and $Y_{b_{i \cdot}}$ denotes the $ith$ row sum of $Y_b$. The initialization of receiver coefficients is analogous. %n-1 is the number of possible edges on each node. the +1(num), +2(denom) is as though a^(0) is a prediction/new draw of the number of edges when edges ~ binomially with total trials n-1, observed success prob rowsums/(n-1), and with a uniform prior on the success prob (see gelman p. 36)
 % See ergmm.initvals, bayes.prop
 
-\item $\displaystyle \sigma_a^{2(0)} = var(a^{(0)})$
+\item[] $\displaystyle b_i^{(0)} = logit \left( \frac{Y_{b_{\cdot i}}  + 1}{n - 1 + 2} \right) - \frac{1}{n}\sum_{i=1}^{n} logit \left( \frac{Y_{b_{\cdot i}} + 1}{n - 1 + 2} \right)$
 
-\item $\displaystyle b_i^{(0)} = logit \left( \frac{Y_{b_{\cdot i}}  + 1}{n - 1 + 2} \right) - \frac{1}{n}\sum_{i=1}^{n} logit \left( \frac{Y_{b_{\cdot i}} + 1}{n - 1 + 2} \right)$
-
-\item $\displaystyle \sigma_b^{2(0)} = var(b^{(0)})$
-
-\item $\displaystyle \beta_0^{(0)} = logit\left( \frac{1}{n(n-1)}\sum_{i,i\neq j}\mathbbm{1}(y_{ij} > \overline{y_{ij}})\right) + \frac{1}{{n \choose 2}}\sum_{i,i<j}{\lVert z^{(0)}_i - z^{(0)}_j \rVert}$ 
+\item[] $\displaystyle \beta_0^{(0)} = logit\left( \frac{1}{n(n-1)}\sum_{i,i\neq j}\mathbbm{1}(y_{ij} > \overline{y_{ij}})\right) + \frac{1}{{n \choose 2}}\sum_{i,i<j}{\lVert z^{(0)}_i - z^{(0)}_j \rVert}$ 
 
 The initial intercept is composed of an ``edge intercept,'' a valued-network analog of graph density, plus a ``distance intercept,'' the average initial pairwise distance.
 
-% edge intercept + distance intercept
-% logit(mean(indicator(Y_ij > mean(Y_ij))))
 % See ergmm.initvals 
+% logit(mean(indicator(Y_ij > mean(Y_ij))))
 % Yg<- model[["Yg"]]
 % Ym<-getYm(Yg,model[["response"]]) #getYm returns as.matrix.network(Yg, "citations", matrix.type="adjacency") with NA's on diag.
 % Ym01<-Ym>mean(Ym,na.rm=TRUE)
-
 % pm[["beta"]]<-logit(mean(Ym01,na.rm=TRUE))+if(!is.null(pm[["Z"]]))mean(dist2(pm[["Z"]])) else 0 #edge intercept + distance intercept
 
+\item[] The initial values of $\displaystyle \sigma_z^{2(0)}, \sigma_a^{2(0)},\text{and } \sigma_b^{2(0)}$ are the variance of $z^{(0)}, a^{(0)},\text{and }b^{(0)})$, respectively.
 \end{itemize}
 
-\emph{Quasi-Netwon Initialization}:
+\emph{Parameter Updates}:  \newline
 
-\begin{itemize}
-\item $z^{(0)}$: Standard normal draws by default, or multidimensional scaling as for MCMC estimation. If MDS, the positions are scaled so that the maximum coordinate size is one, which has shown to improve performance. %As long as positions are scaled, doesn't seem senstive to which of these is chosen
-
-\item $\displaystyle a^{(0)}, b^{(0)}$: Standard normal draws.
-
-\item $\displaystyle \sigma_a^{2(0)}, \sigma_b^{2(0)}, \sigma_z^{2(0)}$: User-supplied value, defaults to 10.
-
-\item $\displaystyle \beta_0^{(0)} = 0$.
-
-\end{itemize}
-
-\subsubsection{MCMC Estimation}\label{MCMC}
-
-With the introduction of latent space network models, \citet{hoff02} developed an MCMC estimation algorithm to fit a model without random sender and receiver effects. \citet{hoff03} added the capacity to fit random effects, and \citet{krivitskyetal09} extended the model further by allowing clustering terms. In this section we present an overview of the MCMC estimation described by those authors, and embellish it with details from the \pkg{latentnet} implementation (\citep{latentnet_jss}, \citep{latentnet}). The process returns a sample from the posterior parameter distribution and desired point estimates, such as a maximum likelihood estimate, posterior mean and mode. 
-\newline
-
-
-
-\emph{MCMC Parameter Updates}:  \newline
-
-Before starting an MCMC chain, \pkg{latentnet} employs an intermediate non-convex optimization step. It uses the bounded quasi-Newton optimization routine of \citet{lbfgsb}, as implemented in the \code{optim} function of \proglang{R}. This returns starting values for MCMC with higher posterior likelihood than the initial values. In Section \ref{??} we compare the gain in posterior likelihood from this optimization routine to the value added from the MCMC chain and to the results of our quasi-Newton algorithm. 
+Before starting an MCMC chain, \pkg{latentnet} employs an intermediate optimization step. It uses the bounded quasi-Newton optimization routine of \citet{lbfgsb}, as implemented in the \code{optim} function of the \proglang{R} base package \pkg{stats}. This returns starting values for MCMC with higher posterior likelihood than the initial values described above. In fact, for our applications the results are competitive with the final MCMC output, and we compare them in Section \ref{estimeval}.
 
 After intermediate optimization, the MCMC chain runs through a suitably long burn-in period. If the automated burn-in length is insufficient, proper length can be determined by carrying out MCMC diagnostics on the results, such as those in the \code{mcmc.diagnostics} method of \pkg{latentnet}. Once starting values for the MCMC sampling are determined, parameters are updated as follows:  
 
@@ -385,98 +356,21 @@ dinvchisq <-function (x, df, scale = 1/df, log = FALSE)
 \subsubsection{Quasi-Newton Estimation}\label{QN}
 
 While the MCMC sample is useful for interval calculations, the rankings themselves rely only on a point estimate. A variety of strategies are available for this optimization problem, but here we present a quasi-Newton method that is fast, transparent, and performs well in applications. \newline
-
   
 \emph{Parameter Updates}:  \newline
-
-For each parameter we aim to update it to a local maximum of the posterior parameter distribution conditioned on all others. A Gibbs sampler cycles through parameters updates for $z, \sigma_z^2, \beta, a, \sigma_a^2, b, \sigma_b^2.$ The conditional variance parameters have closed-form updates. For parameters without closed-form updates, we take a step whose size depends on the first-order partial derivative and direction depends on the unmixed second-order partial. Derivative calculations are detailed in Appendix \ref{Appendix2}. If the step crosses a zero we continue to search within smaller and smaller intervals until finding the zero up to a pre-set tolerance, or until the stepsize falls below a user-specified $\epsilon$. Otherwise, we expand the search up to a window of, at most, twice the largest position coordinate. We update the positions synchronously due to potentially strong correlations between some positions. We cycle through parameter updates for a user-supplied number of cycles, and take as our final estimate the one achieved with the highest posterior probability. Our algorithm differs from common quasi-Newton methods primarily in it adjustments to stepsize and use of only unmixed second-order partial derivatives (the diagonal of the Hessian). The steps are detailed in Algorithm \ref{QNalgorithm}. \newline
 
 %Advantage of gradient descent:
 %- can pick out nodes causing problems due to lack of connectivity by non-converging derivative
 %- know for sure and easily when it's converged to local opt.
 %- widely used and accesible to a wide audience
 
-\begin{algorithm}[!]\label{QNalgorithm}
-\DontPrintSemicolon
-\KwData{$Y, D, runs, \epsilon$}
-
-Set hyperparameters (see Section \ref{Parameter Estimation}) and algorithmic parameters $\bf \Delta$, $\epsilon, tol, j_{max}, runs$.\;
-Initialize model parameters $z, a, b, B_0, \sigma_a^{2}, \sigma_b^{2} \sigma_z^{2}$.\;
-
-\While{$r \leq runs$} {
-  $Z = z$; $Z$ stored and used for calculations, updated after all $z_{i,d}$ are.\;
-  Update $z$:\;
-  \For{$i\in permute(1:n)$}{
-  
-    \For{$d\in permute(1:D)$}{
-    
-      \While{$|\frac{\partial \mathbbm{llik}}{\partial z_{i,d}}| > tol~ \text{\bf and } j \leq j_{max}$}{
-      
-        $z^*_{i,d} = z_{i,d} + \Delta_{z_{i,d}}*sgn(\frac{\partial \mathbbm{llik}}{\partial z_{i,d}})*-sgn(\frac{\partial^2 \mathbbm{llik}}{\partial^2 z_{i,d}}$)\;
-        
-          \If{  $sgn(\frac{\partial \mathbbm{llik}}{\partial z^*_{i,d}}) \neq 
-                 sgn(\frac{\partial \mathbbm{llik}}{\partial z_{i,d}})$}   {
-                 
-              $s = seq(z_{i,d}, ~z^*_{i,d}, ~length = 11)$ \;
-              $z_{i,d} = argmin(|s - z_{i,d}| :
-                         sgn(\frac{\partial \mathbbm{llik}}{\partial s}) \neq
-                         sgn(\frac{\partial \mathbbm{llik}}{\partial z_{i,d}}))$\;
-              update $\frac{\partial \mathbbm{llik}}{\partial z_{i,d}}$ and
-                     $\frac{\partial^2 \mathbbm{llik}}{\partial^2 z_{i,d}}$ \;          
-              $\Delta_{z_{d,i}} = \frac{1}{10}*\Delta_{z_{d,i}}$\;
-    
-              \If{$\Delta_{z_{d,i}} < \epsilon$}{\bf break}
-              
-          } \Else{
-                  
-              \If{$\Delta_{z_{d,i}} \leq max(|z|)$} {$\Delta_{z_{d,i}} = 2*\Delta_{z_{d,i}}$}
-              
-            } \Else { 
-                
-                If no local max is forthcoming, look in both directions\;
-                $s = seq(z_{i,d} - \Delta_{z_{d,i}},
-                         z_{i,d} + \Delta_{z_{d,i}}, ~length = 101) \setminus z_{i,d}$\;
-                
-                $\Delta_{z_{d,i}} = |argmin(|\frac{\partial \mathbbm{llik}}{\partial s}|) - z_{i,d}|$\;
-                $z_{d,i} = |argmin(|\frac{\partial \mathbbm{llik}}{\partial s}|)$\; %update lower case z (not upper case Z yet)
-                update $\frac{\partial \mathbbm{llik}}{\partial z_{i,d}}$ and
-                       $\frac{\partial^2 \mathbbm{llik}}{\partial^2 z_{i,d}}$ \;  
-              }
-      j = j+1
-      } 
-    } 
-  }
-  $\sigma^2_z = \frac{v_z*s^2_z + \sum z^2}{n*D + 2 + v_z}$\;
-  Update $\beta_0$:\;
-  \While{$|\frac{\partial \mathbbm{llik}}{\partial \beta_0} > tol|$}{
-  
-      $B^*_0 = B_0 + \Delta_{B_0}*sgn(\frac{\partial \mathbbm{llik}}{\partial \beta_0})$\;
-      \If {$sgn(\frac{\partial \mathbbm{llik}}{\partial \beta_0}  \neq
-          sgn(\frac{\partial \mathbbm{llik}}{\partial \beta^*_0}))$} { 
-          
-          $s = seq(B_0, ~B^*_0, ~length = 11)$\;
-          $B_0 = argmin(|s - B_0| :
-                         sgn(\frac{\partial \mathbbm{llik}}{\partial s}) \neq
-                         sgn(\frac{\partial \mathbbm{llik}}{\partial B_0}))$\;
-          $\Delta_{B_0} = \frac{1}{10}\Delta_{B_0}$\;
-          update $\frac{\partial \mathbbm{llik}}{\partial B_0}$\;
-        
-      } \Else {$\Delta_{B_0} = 2 * \Delta_{B_0}$}
-    }
-  Update $a_i, i \in permute(1:n)$  by same process as $\beta_0$\;
-  $\sigma^2_a = \frac{v_a*s^2_a + \sum a^2}{n + 2 + v_a}$\;
-  Update $b$ analogous to $a$\;
-  \If {$llik(\theta_{current})>$ previous max} 
-    {store $\hat{\theta} = \theta$}
-}
-\caption{Latent Space Network Quasi-Newton Algorithm\label{QNalg}}
-\end{algorithm}
-
-\emph{Post-processing}:  \newline
-
-We check that all first derivatives at our estimate are within the pre-set tolerance near zero. We also look for any sign that this point is non-optimal by checking that the unmixed second-order partials for the coordinates are negative. For other parameters they are always negative (see Appendix \ref{Appendix2}). In trials, we found that the few coordinates with positive second derivatives at the estimate also had extremely low degree. We highlighted these points because they lack the necessary connectivity to accurately determine several correlated parameters, i.e., sender, receiver and coordinates. Thus, the algorithm output provides a test for the necessary connectivity on a case-by-case basis. This has a similar stabilizing effect to the MKL estimates produced from the MCMC output, though with the cost of a small amount of data. \newline
-
+ We conclude by discussing previous use of quasi-Netwon estimation and tradeoffs between this strategy and MCMC.
+ 
 The main argument against using a quasi-Newton estimation method is that it is not guaranteed to converge to a global optimum since the likelihood function is not convex. However, there are several reasons why it is often still successful in practice. First, in applications well suited to latent space network rating the search space for the positions is relatively small. This is especially true when positions are in low dimension. Second, although MCMC estimation is theoretically guaranteed to converge to the true distribution, if the search space is large and the likelihood function jagged it may face prohibitively slow mixing time and fail to converge to the global optimum. It is easier to diagnose specific points of non-convergence in the quasi-Newton method using the stored derivatives. Third, the speed of the quasi-Newton method means we can consider many initial values to increase our chance of finding the a global optimum. Lastly, we are still able to use MCMC estimation to provide a check on our fit. Using the quasi-Newton estimate to seed the MCMC chain we can generate a useful sample from the posterior and may be able to improve on our results while still reducing the overall time to fit. In our trials on networks of up to several hundred nodes, results from quasi-Newton closely approximated those from MCMC.
+
+Direct optimization of latent-space models has been used previously. \citet{handcock07} compared a two-stage maximum likelihood method to MCMC estimation for a latent space cluster model. They found that the two-stage MLE gives a good match to the MCMC fit in terms of cluster membership and relative positions, but the clusters are more spread out. In that case, the MLE is fit to the model without clusters, so it cannot capture dependence between positions and cluster assignments. In addition, the network fit are binary, so they provide less information than valued networks when fitting positions. More typically, direct optimization is used as an initialization step of MCMC, as in \citet{hoff02} and \citep{latentnet}. Methods introduced to speed up estimation such as the variational Bayesian method of \citet{vblpcm10, vblpcm} or the case-control approximate likelihood method of \citet{raftery12}, treat Bayesian MCMC estimation as the benchmark for complexity. Yet these methods compromise the true likelihood function on behalf of speed. For instance, positions fit by the variational Bayesian algorithm also show greater within-cluster variance than MCMC estimates \citep{vblpcm10}.
+
+Although the scaling of the adjacency matrix, $\mathcal{O}(n^2)$, is problematic for quasi-Networn estimation, the number of iterations required is drastically smaller than for MCMC. Below 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % SETUP FOR APPLICATION SECTION %
@@ -832,34 +726,6 @@ t2.srp2 = Sys.time()
 
 @
 
-<< latent_qn, eval = T, echo = F, results = 'hide', cache=T, cache.comments = FALSE, warning= FALSE>>=
-
-#best trial after several initiations
-set.seed(12)
-
-t1 = Sys.time()
-latent_qn = lsqn(t(Cmatrix), runs = 50, tol = .01, Z.init = "rnorm")
-    #best results with these settings ^
-    #better to do more initializations with fewer runs than vice versa
-t2 = Sys.time()
-
-@
-
-<< latent_sr2_init_qn, eval = F, results = 'hide', echo = F, cache=T, dependson = "latent_qn", cache.comments = FALSE, warning= FALSE>>=
-
-# No particular gain from using quasi-Newton to initialize beyond gain from the random initialization method of QN
-t1.init.qn = Sys.time()
-latent.srp2.init.qn = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
-       response = "citations", family = "Poisson.log", seed = 30,
-       tofit = c("mcmc", "mkl", "procrustes", "mle"),
-       control = ergmm.control(burnin = 50000, interval = 500,
-                               sample.size = 5000, mle.maxit = 100),
-       user.start = with(latent_qn$map, list(Z=Z, sender=sender, receiver=receiver,
-                         beta = beta, sender.var = sender.var, receiver.var = receiver.var,
-                         Z.var = Z.var)))
-t2.init.qn = Sys.time()
-@
-
 << latent_sr2_init_r, eval = T, results = 'hide', echo = F, cache = T, cache.comments = FALSE, warning= FALSE>>=
 
 #random initation of sender and receiver, and scaling Z helps the model fit
@@ -881,32 +747,6 @@ latent.srp2.init.r = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
                                                   sender.var = var(a), receiver.var = var(b),
                                                   Z.var = var(as.vector(Z))))
 t2.init.r = Sys.time()
-@
-
-<< latent_sr2_init_r.sann, eval = T, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
-
-latent.srp2.init.r.sann = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
-                                response = "citations", family = "Poisson.log", seed = 30,
-                                tofit = c("mcmc", "mkl", "procrustes", "mle"),
-                                control = ergmm.control(burnin = 50000, interval = 500,
-                                                        sample.size = 5000, mle.maxit = 100,
-                                                        optim.method = "SANN"),
-                                user.start = list(Z = Z, sender = a, receiver = b, beta = 0,
-                                                  sender.var = var(a), receiver.var = var(b),
-                                                  Z.var = var(as.vector(Z))))
-@
-
-<< latent_sr2_init_r.bfgs, eval = T, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
-latent.srp2.init.r.bfgs = ergmm(Cnet ~ euclidean(d = 2) + rsender + rreceiver,
-                                response = "citations", family = "Poisson.log", seed = 30,
-                                tofit = c("mcmc", "mkl", "procrustes", "mle"),
-                                control = ergmm.control(burnin = 50000, interval = 500,
-                                                        sample.size = 5000, mle.maxit = 100,
-                                                        optim.method = "BFGS"),
-                                user.start = list(Z = Z, sender = a, receiver = b, beta = 0,
-                                                  sender.var = var(a), receiver.var = var(b),
-                                                  Z.var = var(as.vector(Z))))
-
 @
 
 % PageRank does do something that other methods i talk about don't, which is weight citations by importance of the citing journal.
@@ -1180,7 +1020,7 @@ cor(Cgraph.page.rank, hits$auth+hits$hub)
 plot(Cgraph.page.rank, hits$auth+hits$hub) 
 @
 
-<<r summarytable, eval = T, cache = T, echo = F, results = 'asis', dependson = c("setup", "setup_jrss", "latent_sr2", "pagerank", "Eigenfactor", "IF"), warning = F, message = F >>=
+<<r summarytable, eval = T, cache = T, echo = F, results = 'asis', dependson = c("setup", "setup_jrss", "latent_sr2", "pagerank", "Eigenfactor", "IF"), warning = F, message = F, fig.width = 6 >>=
 
 # varintable <- read.csv("/Users/jac/Documents/citation/Varin_Cattelan_Firth_supplement/Data/journal-scores.csv")
 # can't use this table directly it includes too many journals
@@ -1190,8 +1030,8 @@ summarytable_rate = round(data.frame("Latent Space" = latent.srp2$mkl$receiver -
                           "quasi-Stigler"= fit.table2$quasi,
                           "PageRank" = Cgraph.page.rank,
                           "Eigenfactor" = EF,
-                          "Article Influence" = AI,
-                          "Impact Factor" = IF2),3)
+                          "Article Inf." = AI,
+                          "Impact Fac." = IF2),3)
 
 summarytable_rank = data.frame(
                           "Latent Space" = order(order(latent.srp2.init.r$mkl$receiver -
@@ -1199,24 +1039,27 @@ summarytable_rank = data.frame(
                           "quasi-Stigler"= order(order(fit.table2$quasi, decreasing = T)),
                           "PageRank" = order(order(Cgraph.page.rank, decreasing = T)),
                           "Eigenfactor" = order(order(EF, decreasing = T)),
-                          "Article Influence" = order(order(AI, decreasing = T)),
-                          "Impact Factor" = IF2.rank)
+                          "Article Inf." = order(order(AI, decreasing = T)),
+                          "Impact Fac." = IF2.rank)
 
 rownames(summarytable_rank) = rownames(summarytable_rate) 
 
 library(xtable)
-summary_xtable_rank <- xtable(summarytable_rank, caption = "Compared Rankings", digits = 0, label = "summarytable_rank")
+summary_xtable_rank <- xtable(summarytable_rank, caption = "Comparison of journal rankings", digits = 0, label = "summarytable_rank")
    
-summary_xtable_rate <-xtable(round(cor(summarytable_rate),2), caption = "Correlation Table of Journal Ratings Methods", label = "correlation_table")
+summary_xtable_rate <-xtable(round(cor(summarytable_rate),2), caption = "Correlation of journal rating methods", label = "correlation_table")
 
 col1 <- rep("\\rowcolor[gray]{0.9}", 4)
 print.xtable(summary_xtable_rank, booktabs = TRUE,
              table.placement = getOption("xtable.table.placement", "!"),
              add.to.row = list(pos = as.list(c(2, 7, 25, 18)), command = col1),
              sanitize.colnames.function=function(x)gsub("\\."," ",x),
+             size="\\fontsize{9pt}{10pt}\\selectfont",
              caption.placement = "top")
 
-print.xtable(summary_xtable_rate, sanitize.colnames.function=function(x)gsub("\\."," ",x), caption.placement = "top")   
+
+print.xtable(summary_xtable_rate, sanitize.colnames.function=function(x)gsub("\\."," ",x), sanitize.rownames.function=function(x)gsub("\\."," ",x), caption.placement = "top", size="\\fontsize{9pt}{10pt}\\selectfont",
+             align=c('p{.5in}',rep('|c', 7)))   
 @
 
 Table \ref{summarytable_rank} compares journal rankings from the latent space model, quasi-Stigler model, PageRank, Eigenfactor, Article Influence, and Impact Factor.
@@ -1226,7 +1069,7 @@ Comparisons to other versions of the Impact Factor can be found in Table 4 of \c
 Although PageRank ranks the ``big four'' journals highest, it places \textit{Statistics in Medicine} (StMed), \textit{Journal of Statistical Planning and Inference} (JSPI), and \textit{Computational Statistics and Data Analysis} (CSDA) in positions six through eight, much higher than most other methods. These journals have the three highest out-citation counts in our data, and are among the most prolific citers of the top four journals. However, their ratios of in- to out-citations rank 20th, 30th, and 35th. Eigenfactor behaves similarly to PageRank, with some differences reflecting its use of normalized data. (Eigenfactor is strongly correlated with PageRank, $0.91$, as shown in Table \ref{correlation_table}.) We conclude that PageRank and Eigenfactor are better measures of centrality or activity than importance, influence or prestige. 
 
 The Impact Factor rankings show the detriment of averaging per article and not controlling for out-citations or a citation's field of origin. For example, \textit{Environmental and Ecological Statistics} (EES) ranks 14th and the \textit{Journal of Statistical Software} (JSS) ranks 4th, though they have the second- and ninth-lowest in-citation counts in our data. On the other hand, the ``big four'' journals Bka and JASA are ranked 11th and 8th. The Impact Factor ratings are most strongly correlated with Article Influence ($0.87$, see Table \ref{correlation_table}), which is also normalized by articles per journal and calculated using all citations, not just ones from the $47$ journals in our data set.  %I checked and pagerank calculated on normalized data and just the 47 jounals is pretty similar to Eigenfactor.
-The two methods share some anomalous rankings, such as \textit{Statistical Science} placing 2nd and 6th respectively. We argue that the high rank for this journal is not reflective of its importance within the field. Rather, it owes to its connections to top journals (confirmed by PageRank and Eigenfactor ranking it 13th) and a relatively low number of articles published. Its ratio of in- to out-citations ranks 24th in the network. As a review journal it is more likely to dissemenate than publish cutting-edge research. The visualizations provided by the latent space model help to further explain the position of \textit{Statistical Science}, which will be revisited below.
+The two methods share some anomalous rankings, such as \textit{Statistical Science} placing 2nd and 6th respectively. We argue that the high rank for this journal is not reflective of its importance within the field. Rather, it owes to its connections to top journals (confirmed by PageRank and Eigenfactor ranking it 13th) and a relatively low number of articles published. Its ratio of in- to out-citations ranks 24th in the network. As a review journal it is more likely to disseminate than publish cutting-edge research. The visualizations provided by the latent space model help to further explain the position of \textit{Statistical Science}, which will be revisited below.
 %The journal's founding editor stated that a central goal of the journal is ``presenting the full range of contemporary statistical thought at a modest technical level accessible to the wide community of practitioners, teachers, researchers and students of statistics and probability'' \citep{degroot86}.
 
 The Latent Space and quasi-Stigler rankings are very similar (correlation $0.99$, see Table \ref{correlation_table}) and seem to provide the best measures of influence or importance in the field. They rank the ``big four'' journals in the top four positions, the \textit{Journal of Statistical Software} 42nd, and \textit{Statistical Science} 19th and 18th respectively. On the other hand, the methodological journal \textit{Scandinavian Journal of Statistics} (SJS) is highly ranked by both, at 6th and 8th respectively. SJS states its mission as ``reporting significant and innovative original contributions to statistical methodology, both theory and applications'' \citep{SJS}. \citet{varinetal} use data from the UK Research Assessment Exercise (RAE), a periodic evaluation of UK university departments, as an external check on the quasi-Stigler rankings. They find some evidence that the quasi-Stigler model provides stronger correlation to RAE assessment of research quality than other methods. Details of that comparison, and its many caveats, are found in Section 6 of \citet{varinetal}.
@@ -1235,7 +1078,7 @@ The Latent Space and quasi-Stigler rankings are very similar (correlation $0.99$
 
 As the quasi-Stigler and latent space models emerge as the best suited to our ranking priorities, we compare their results most closely. Figure \ref{fig:r latent2_stigler} (left) plots the compared ranks, with lighter labels for larger differences in rank. Three is the highest observed difference. However, the underlying differences in scores are very small, as shown in the right panel of Figure \ref{fig:r latent2_stigler}. Figure \ref{fig:r latent2_joy} plots the posterior distributions of latent space scores. It confirms that the small differences in rank shown in Figure \ref{fig:r latent2_stigler} are not significant given the uncertainty in the estimated scores, highlighting the importance of capturing model uncertainty.
 
-<<r latent2_stigler, eval = T, echo = F, cache = T, warning = F, message = F, fig.height = 3, fig.width = 7, results = 'hide', dependson= c("setup", "latent_sr2"), fig.cap = 'Left: Latent space vs. quasi-Stigler rankings. Better-ranked journals are at the top right, corresponding to higher numbers. Right: Comparison of scores rather than rankings. Lighter labels means larger differences (maximum rank difference is 3).'>>=
+<<r latent2_stigler, eval = T, echo = F, cache = T, warning = F, message = F, fig.height = 3, fig.width = 6, fig.align = "center", results = 'hide', dependson= c("setup", "latent_sr2"), fig.cap = 'Left: Latent space vs. quasi-Stigler rankings. Better-ranked journals are at the top right, corresponding to higher numbers. Right: Comparison of scores rather than rankings. Lighter labels means larger differences (maximum rank difference is 3).'>>=
 
 par(mfrow = c(1,2))
 par(mai = c(.8,.8,.8,.4))
@@ -1263,7 +1106,8 @@ rc = ggplot(data = srs2b, aes(x = quasi.Stigler, y = latent_space,
     scale_color_gradient(low = "black", high = "gray", guide = F) + 
     theme_bw() +
     ylab("2D Latent Space") +
-    ggtitle(label = "Rank Comparison")
+    ggtitle(label = "Rank Comparison") +
+    theme(plot.title = element_text(size = 12))
 
 sc = ggplot(data = srs2, aes(x = quasi.Stigler, y = latent_space,
                          label = rownames(srs2b), col = col1)) +
@@ -1271,12 +1115,13 @@ sc = ggplot(data = srs2, aes(x = quasi.Stigler, y = latent_space,
     geom_point() +
     theme_bw() +
     ylab("2D Latent Space") +
-    ggtitle(label = "Score Comparison")
+    ggtitle(label = "Score Comparison") +
+    theme(plot.title = element_text(size = 12))
 
 cowplot::plot_grid(rc, sc)
 @
 
-<<r latent2_joy, eval = T, echo = F, cache = T, warning = F, message = F, fig.pos='t!', fig.height = 5, fig.cap = 'Posterior distributions of latent space score. Most small differences in ratings are not signficiant.'>>=
+<<r latent2_joy, eval = T, echo = F, cache = T, warning = F, message = F, fig.pos='t!', fig.height = 6, fig.width = 6, fig.align = "center", fig.cap = 'Posterior distributions of latent space score. Most small differences in ratings are not signficiant.'>>=
 
 library(ggplot2)
 library(ggjoy)
@@ -1294,6 +1139,9 @@ tmp = data.frame(score = as.vector(quantiles2), node = as.factor(rep(1:47, each 
 # Plot
 ggplot(tmp, aes(x = score, y = node)) + geom_joy() + 
   ggtitle("Posterior Distributions of Latent Space Scores") +
+  theme_bw() + 
+  theme(plot.title = element_text(size = 12),
+        axis.text.y = element_text(size = 7)) +
   scale_y_discrete(name ="journal & point estimate",
                    labels= apply(cbind(rownames(Cmatrix)[o], sort(round(latent2, 2))),
                                  1, paste, collapse = "  "))
@@ -1449,6 +1297,165 @@ centipede.plot <- function (segs, mct = "mean", lower.limit = "std.error", upper
 }
 @
 
+<<r latent2_centipede, eval = T, echo = F, cache = T, warning = F, message = F, dependson= c("setup", "latent_sr2", "setup_jrss", "latent2_stigler"), fig.height = 5.5, fig.pos = "H", fig.cap = "Visualizing uncertainty in latent space scores (left) and quasi-Stigler scores (right). The error bars are +/- 1.96 estimates of standard deviation (left) and quasi-standard error (right). Comparison of ``comparison intervals'' around estimated values, which are equal to 1.96$*$QSE in each direction, and 1.96$*$SE in each direction. Note that due to fit constraints, AMS only has an estimated QSE.">>=
+
+# from plotrix package, but made some changes ####
+# added cex arg and commented out something with segs[4, and x axis label
+
+centipede.plot <- function (segs, mct = "mean", lower.limit = "std.error", upper.limit = lower.limit, 
+    left.labels = NULL, right.labels = NULL, sort.segs = TRUE, 
+    main = "", xlab = NA, pch = 21, vgrid = NA, hgrid = NA, gridcol = "lightgray", 
+    mar = NA, col = par("fg"), bg = "green", cex = NULL, ...) 
+{
+    if (missing(segs)) {
+        cat("Usage: centipede.plot(segs,...)\n\twhere segs is a dstat object")
+        stop("or a matrix of midpoints and limits")
+    }
+    if (is.list(segs)) {
+        if (all(lapply(segs, is.numeric))) 
+            segs <- get.segs(segs, mct = mct, lower.limit = lower.limit, 
+                upper.limit = upper.limit)
+        else stop("If segs is a list, all the components must be numeric")
+    }
+    if (class(segs) == "dstat") {
+        midpoint <- "mean"
+        if (lower.limit == "var") {
+            if (rownames(segs)[2] == "var") 
+                ll <- segs[1, ] - segs[2, ]
+            if (rownames(segs)[2] == "sd") 
+                ll <- segs[1, ] - segs[2, ] * segs[2, ]
+        }
+        if (upper.limit == "var") {
+            if (rownames(segs)[2] == "var") 
+                ul <- segs[1, ] + segs[2, ]
+            if (rownames(segs)[2] == "sd") 
+                ul <- segs[1, ] + segs[2, ] * segs[2, ]
+        }
+        if (lower.limit == "sd") {
+            if (rownames(segs)[2] == "var") 
+                ll <- segs[1, ] - sqrt(segs[2, ])
+            if (rownames(segs)[2] == "sd") 
+                ll <- segs[1, ] - segs[2, ]
+        }
+        if (upper.limit == "sd") {
+            if (rownames(segs)[2] == "var") 
+                ul <- segs[1, ] + sqrt(segs[2, ])
+            if (rownames(segs)[2] == "sd") 
+                ul <- segs[1, ] + segs[2, ]
+        }
+        if (lower.limit == "std.error") {
+            if (rownames(segs)[2] == "var") 
+                ll <- segs[1, ] - sqrt(segs[2, ])/sqrt(segs[3, 
+                  ])
+            if (rownames(segs)[2] == "sd") 
+                ll <- segs[1, ] - segs[2, ]/sqrt(segs[3, ])
+        }
+        if (upper.limit == "std.error") {
+            if (rownames(segs)[2] == "var") 
+                ul <- segs[1, ] + sqrt(segs[2, ])/sqrt(segs[3, 
+                  ])
+            if (rownames(segs)[2] == "sd") 
+                ul <- segs[1, ] + segs[2, ]/sqrt(segs[3, ])
+        }
+        segs <- rbind(segs[1, ], ll, ul, segs[3, ])
+    }
+    segdim <- dim(segs)
+    if (sort.segs) {
+        seg.order <- order(segs[1, ])
+        segs <- segs[, seg.order]
+    }
+    else seg.order <- 1:segdim[2]
+    oldpar <- par("mar")
+    #if (is.na(mar[1])) 
+    #    mar <- c(4, 6, 1 + 2 * (nchar(main) > 0), 5)
+    #par(mar = mar)
+    plot(x = c(min(segs[2, ]), max(segs[3, ])), y = c(1, segdim[2]), 
+        main = main, xlab = "", ylab = "", type = "n", axes = FALSE, 
+        ...)
+    box()
+    if (!is.na(vgrid[1])) 
+        abline(v = vgrid, lty = 1, col = gridcol)
+    if (is.null(hgrid)) 
+        abline(h = 1:segdim[2], lty = 2, col = gridcol)
+    else if (!is.na(hgrid[1])) 
+        abline(h = hgrid, lty = 2, col = gridcol)
+    axis(1, cex.axis = cex)
+    arrows(segs[2, ], 1:segdim[2], segs[3, ], 1:segdim[2], length = 0.05, 
+        angle = 90, code = 3, col = col)
+    points(segs[1, ], 1:segdim[2], pch = pch, col = col, bg = bg)
+    if (is.null(left.labels)) {
+        left.labels <- colnames(segs)
+        if (is.null(left.labels)) 
+            left.labels <- paste("V", seg.order, sep = "")
+    }
+    else left.labels <- left.labels[seg.order]
+    plot.limits <- par("usr")
+    mtext(left.labels, 2, line = 0.2, at = 1:segdim[2], adj = 1, 
+        las = 1, cex = cex)
+    #if (is.null(right.labels)) 
+    #    right.labels <- paste(round(segs[1, ], 2), "(", segs[4, 
+    #        ], ")", sep = "")
+    #else 
+    right.labels <- right.labels[seg.order]
+    mtext(right.labels, 4, line = 0.2, at = 1:segdim[2], adj = 0, 
+        las = 1, cex = cex)
+    #if (is.na(xlab)) 
+    #    xlab <- paste("| -", rownames(segs)[2], "-", rownames(segs)[1], 
+    #        "-", rownames(segs)[3], "- |")
+    if (!is.na(xlab)) 
+        mtext(xlab, 1, line = 2)
+    par(oldpar)
+    invisible(segs)
+}
+
+# 2-D latent space variance by sample ####
+model = latent.srp2.init.r
+sd2 = apply(model$sample$receiver - model$sample$sender, 2, sd)
+latent2 = model$mkl$receiver - model$mkl$sender
+centipede1 = t(cbind(latent2, latent2 - 1.96*sd2, latent2 + 1.96*sd2))
+colnames(centipede1) = Cnet%v%"vertex.names"
+
+# QSE using glm output (account for overdispersion) ####
+shift = mean(g1$coefficients)
+v = c(0, diag(vcov(g1))) #vcov(g1) = summary(g1)$cov.scaled = summary(g1)$cov.unscaled*phi 
+centipede.qse = (cbind(fit.table2$quasi,
+                        fit.table2$quasi - 1.96*fit.table2$qse,
+                        fit.table2$quasi + 1.96*fit.table2$qse)) 
+
+centipede.se = (cbind(g1$coefficients - shift,
+                       g1$coefficients - shift - 1.96*sqrt(v), 
+                       g1$coefficients - shift + 1.96*sqrt(v)))
+rownames(centipede.se) = rownames(fit.table2)
+
+#plot ####
+par(mfrow = c(1,2))
+par(mai = c(0.8, 0.6, .1, 0.6))
+
+centipede.plot(centipede1, vgrid = c(-1,0,1,2), cex = .6, right.labels = round(latent2, 2),
+               main = NULL,
+               bg = "red", xlab = "2-D Latent Space")
+
+centipede.plot(t(centipede.se), vgrid = c(-1,0,1,2), cex = .6, 
+               right.labels = round(fit.table2$quasi, 2), 
+               left.labels = rownames(fit.table2), 
+               bg = c("blue"), col = c("blue"),
+               main = NULL,
+               xlab = "Quasi-Stigler SE and QSE Intervals",
+               xlim = c(-2, 2.5))
+par(new=TRUE)
+centipede.plot(t(centipede.qse), cex = .6,
+               bg = c("blue"), col = c("cyan"),
+               left.labels = " ",
+               right.labels = " ",
+               xlim = c(-2, 2.5))
+legend("bottomright", legend = c("SE", "QSE"), col = c("blue", "cyan"), pch = 15)
+
+# summary of ses
+mean(sd2); range(sd2); range(sd2[-35])
+summary(sqrt(v)[v>0])
+summary(sd2)
+@
+
 <<r QS_sim_CI, eval = F, cache = T, echo = F, results = 'hide', warning = F>>=
 
 # "True SE vs. Simulated 95% Intervals"
@@ -1553,58 +1560,6 @@ legend("bottomright", legend = c("SE", "SIM"), col = c("red", "green"), pch = 16
 
 @
 
-<<r SE_vs_LATENT, cache = F, eval = F, echo = F, results = 'hide', warning = F, fig.keep = 'last', fig.height = 10>>=
-
-#True SE for quasi-Stigler vs. Intevals vs. Latent Space.#Pretty comparable overall. StataJ's true SE interval is noticeably larger than others. This is likely due to the fact that it has fewer observed citations (in and out) than all other journals.
-
-latent.srp2 <- readRDS("~/Documents/citation/Sunbelt/latent_srp2R.RDS")
-
-#latent space centipede ####
-
-# have to be careful with centipede plot now because
-# order(centipede.se[,1]) != order(centipede.lat[,1])
-
-# use seperate plots
-
-par(mfrow = c(1,2))
-latent.model = latent.srp2
-sd2 = apply(latent.model$sample$receiver - latent.model$sample$sender, 2, sd)
-latent2 = latent.model$mkl$receiver - latent.model$mkl$sender
-
-centipede.lat = cbind(latent2, latent2 - 1.96*sd2, latent2 + 1.96*sd2) + 
-    max(centipede.se[,1]) - max(latent2)
-    #adding a shift so they align in the plot!
-rownames(centipede.lat) = rownames(Cmatrix)
-
-centipede.plot(t(centipede.lat), vgrid = c(-1,0,1,2), cex = .7, 
-               right.labels = round(centipede.lat[,1], 2),
-               left.labels = rownames(fit.table2),
-               bg = "green", col = "green",
-               main = "Latent Space")
-
-centipede.plot(t(centipede.se), vgrid = c(-1,0,1,2), cex = .7, 
-               right.labels = round(centipede.se[,1], 2),
-               left.labels = rownames(fit.table2),
-               bg = "red", col = "red",
-               main = "True SE")
-
-#keep seperate names
-
-par(mfrow = c(1,1))
-centipede1 = rbind(centipede.lat, centipede.se)
-centipede1 = cbind(centipede1, c(rep(1, 47), rep(2, 47)))
-centipede1 = centipede1[order(centipede1[,1]), ]
-centipede.plot(t(centipede1[,1:3]), vgrid = c(-1,0,1,2), cex = .5, 
-               left.labels = rownames(centipede1[,1]),
-               right.labels = round(centipede1[,1], 2),
-               left.labels.col = centipede1[,4],
-               right.labels.col = centipede1[,4],
-               bg = centipede1[,4], col = centipede1[,4],
-               main = "True SE and Latent Space",
-               sort.segs = F)
-legend("bottomright", legend = c("SE", "LS"), col = c(2, 1), pch = 16)
-@
-
 \subsection{Visualization of Latent Space Journal Rankings} \label{Visualization}
 
 <<r latent_sr2_plot, eval = T, cache = T, dependson= c("setup", "setup2", "latent_sr2", "setup_jrss"), echo = F, fig.width = 6, cache = T, warning=F, message=F, fig.cap= 'Estimated journal positions from the two-dimensional latent space model. Top: Point estimates with node size scaled to receiver minus sender coefficient. Bottom: Sample of positions from the model. Colouring is due to the hierarchical clustering of Varin et al. '>>=
@@ -1652,7 +1607,6 @@ Figure \ref{fig:r latent_sr2_plot} (top) shows estimated MKL positions. %shortre
 The size of the nodes is scaled to the estimated scores. The coloring and cluster labels for the nodes in both panels are based on the hierarchical clustering of \citet{varinetal}. Although there is no clustering term in our latent space model, the estimated positions are consistent with these clusters. (Some labels are difficult to read, but this is addressed by the dynamic plot referenced below.) The bottom panel of Figure \ref{fig:r latent_sr2_plot} shows a sample of 1000 posterior draws of positions, visualizing the uncertainty. Although individual journal positions are variable, the clusters occupy discernible areas. However, their irregular shapes caution against applying the latent space clustering model of \citet{handcock07}, in which positions given clusters have spherical Gaussian distributions. 
 %I did experiment with it and it didn't fit.
 The plot shows how they fit together and provides more information than discrete labels. For example the \textit{Journal of Biopharmaceutical Statistics} is most deeply embedded in the applied/health cluster, while \textit{Statistical Science} is on the border. In fact, it should be classified with the review journals it lies near. (We discuss the use of latent space visualization to identify mislabeled classes in Section \ref{Example2}.)  %Broadly speaking, as we move from left to right we go from general journals to specific application areas. The computational journals are towards the top, and the theoretical cluster is the most centrally located. 
-
 
 The citation network is too dense to display network edges in a static plot. However, using the \pkg{visNetwork} package we render a dynamic plot of the citation network to explore its connections. A version of the plot is included as an html file in the supplementary material, and is available on the author's website (\url{http://www.stat.ucla.edu/~jane.carlen/pages/citation_net.html}). Because of the density of the network, edges in the dynamic visualization are only shown if they account for at least three percent of a journal's out-citations, and their width when highlighted is scaled to that percentage. Rankings based on the latent space model are reported next to the journal titles in the drop-down menu on the left and in the hover text. Coloring of highlighted edges is determined by the cluster of the originating node, the same clusters as in Figure \ref{fig:r latent_sr2_plot}.
 
@@ -1747,19 +1701,14 @@ Having illustrated the value of latent space rankings and visualization, in this
 
 \subsubsection{Latent Dimension} \label{dim}
 
-To choose the latent space dimension of the model we consider estimates of the integrated likelihood,
-
-\begin{equation}
-P(Y) = \int P(\theta|Y)P(\theta)d\theta.
-\end{equation}
-
-\noindent The classic Bayesian information criterion (BIC) of a model is an approximation to $-2log(P(Y))$, under the assumption that the data under the model follows an exponential family distribution.
+To choose the latent space dimension of the model we consider estimates of the Bayesian information criterion (BIC), which is itself a form of estimate of the integrated likelihood for the data under the model. %P(Y) = \int P(\theta|Y)P(\theta)d\theta. 
+The classic Bayesian information criterion (BIC) of a model is an approximation to $-2log(P(Y))$, assuming that the data under the model follows an exponential family distribution.
 
 \begin{equation}
 BIC = -2log(P(Y \vert \hat{\theta})) + d \cdot log(s),
 \end{equation}
 
-\noindent where $\hat{\theta}$ is the maximum-likelihood parameter estimate, $d$ is the dimension of the parameter space, and $s$ is the effective sample size. In the case of the latent space rating model, we cannot guarantee that the MCMC-generated maximum-likelihood estimate is optimal, the parameter dimension is constrained by prior distributions, and different effective sample sizes are used in estimating various parameters. As an alternative to BIC we consider the BIC for model selection (BICM) of \citet{BICM}.
+\noindent where $\hat{\theta}$ is the maximum-likelihood parameter estimate, $d$ is the dimension of the parameter space, and $s$ is the effective sample size. In the case of the latent space rating model, the MCMC-generated maximum-likelihood estimate may not be completely optimal, the parameter dimension is constrained by prior distributions, and different effective sample sizes are used in estimating various parameters. As an alternative to BIC we consider the BIC for model selection (BICM) of \citet{BICM}.
 
 \begin{equation}
 BICM = -2\hat{\ell}_{max} + \sum_{k=1}^{K}log(n_k) + (\hat{d} - K)log(n_{K}),
@@ -1777,15 +1726,15 @@ BICM = -2\hat{\ell}_{max} + \sum_{k=1}^{K}log(n_k) + (\hat{d} - K)log(n_{K}),
 \hat{d} = 2var(\ell_t).
 \end{equation}
 
-\noindent We use the MCMC sample for this estimate, so it is important that it has been thinned enough that the posterior log likehoods are independent. (This can be checked using the \code{mcmc.diagnostics} function of \pkg{latentnet}.) In addition, we note that the assumed scale parameter implies another estimate of $\alpha$ if we have a pre-existing estimate of $l_{max}$, namely $\alpha = E[l_{max} - l_t]$. This recovers the estimate of parameter dimension introduced by \citet{paramD},    %Note that this is similar to a one half variance formula in Gelman, but that formula has questioned. http://andrewgelman.com/2006/07/06/number_of_param/
+\noindent We use the MCMC sample for this estimate, so it is important that it has been thinned enough that the posterior log likelihoods are independent. (This can be verified using the \code{mcmc.diagnostics} function of \pkg{latentnet}.) In addition, we note that the assumed scale parameter implies another estimate of $\alpha$ if we have a pre-existing estimate of $l_{max}$, namely $\alpha = E[l_{max} - l_t]$. This recovers the estimate of parameter dimension introduced by \citet{paramD},    %Note that this is similar to a one half variance formula in Gelman, but that formula has questioned. http://andrewgelman.com/2006/07/06/number_of_param/
 
 \begin{equation}
 p_D = -2*\hat E[l_t - l_{max}] = \hat{D}_{avg}(Y, \theta) - D(Y, \hat{\theta}), %also in gelman
 \end{equation}
 
-\noindent where deviance $D(Y,\theta) = -2log(P(Y \vert \theta))$ and  $\hat{D}_{avg}(Y)$ is calculated by averaging over the MCMC sample. \citet{paramD} use the posterior mean for the point estimate $\hat\theta$, but note that others can be justified. Discrepancy between $\hat{d}$ and $p_D$ reveals the extent to which the asymptotic gamma assumption does not fit the data. This may imply that the scale parameter is not exactly one, though it should be close. (The discrepancy can provide an estimate of how far it is from one, which was a challenge to \cite{BICM}.) Alternately, it may indicate error in our estimate of $l_{max}$ or $var(l_t)$, but if the magnitude of this error is small, as we find in this example, then we can proceed with model selection.
+\noindent where deviance $D(Y,\theta) = -2log(P(Y \vert \theta))$ and  $\hat{D}_{avg}(Y)$ is calculated by averaging over the MCMC sample. \citet{paramD} use the posterior mean for the point estimate $\hat\theta$, but note that others can be justified. Discrepancy between $\hat{d}$ and $p_D$ reveals the extent to which the asymptotic gamma assumption does not fit the data. This may imply that the scale parameter is not exactly one, though it should be close. Alternately, it may indicate error in our estimate of $l_{max}$ or $var(l_t)$, but if the magnitude of this error is small, as we find in this example, then we can proceed with model selection.
 
-For the effective sample size, we are primarily concerned with the number of data points used to estimate positions, since our models only differ in the dimension of positions. Although \citet{BICM} based the effective sample size for positions in a binary network on the number of realized edges, in a valued network zero-weight edges are informative, so we use $2(n-1)$. This poses a slight problem because the sender and receiver random effects would logically halve that effective sample size to $n-1$, since they only depend on out- and in-edges respectively. However, the over-penalizaiton that results is consistent across dimensional models, so we can ignore it when comparing models.
+For the effective sample size, we are primarily concerned with the number of data points used to estimate positions, since our models only differ in the dimension of positions. Although \citet{BICM} based the effective sample size for positions in a binary network on the number of realized edges, in a valued network zero-weight edges are informative, so we use $2(n-1)$. This poses a slight problem because the sender and receiver random effects would logically halve that effective sample size to $n-1$, since they only depend on out- and in-edges respectively. However, the over-penalization that results is consistent across dimensional models, so we can ignore it when comparing models.
 
 % We can use the simulated graph stuff from sim_point_point to establish that the marginal distribution of data under the model is similar to the distribution of data given theta, which is poisson/exponential family?
 
@@ -1907,7 +1856,7 @@ pD_1 = -2*lhat_1 + 2*lmean_1
 pD_2 = -2*lhat_2 + 2*lmean_2
 pD_3 = -2*lhat_3 + 2*lmean_3
 
-# bootstrap SE
+# bootstrap SE for BICM_dhat. for pD should be even smaller/can be controlled by sample size
 SE_0 = (2*log(2*(n-1))) * sqrt(var(sapply(1:5000, function(x)
        {var((latent.srp0$sample$lpY)[sample(5000, 5000, replace = T)])})))
 SE_1 = (2*log(2*(n-1))) * sqrt(var(sapply(1:5000, function(x)
@@ -1916,7 +1865,6 @@ SE_2 = (2*log(2*(n-1))) * sqrt( var(sapply(1:5000, function(x)
        {var((latent.srp2.init.r$sample$lpY)[sample(5000, 5000, replace = T)])})))
 SE_3 = (2*log(2*(n-1))) * sqrt( var(sapply(1:5000, function(x)
        {var((latent.srp3.init.r$sample$lpY)[sample(5000, 5000, replace = T)])})))
-
 # BIC table ####
 
 BIC.table = data.frame(row.names = c("0", "1", "2", "3"))
@@ -2000,23 +1948,22 @@ for (i in 1:length(samp1)) {
 }
 @
 
-Table \ref{BIC.table} shows, from left to right, a traditional BIC estimate with parameter dimension equal to the number of parameters and sample size equal to $n*(n-1)$; BICM using $\hat{d}$; BICM using $p_D$; the $\hat{d}$ and $p_D$ estimates of parameter dimension; and the correlation in ratings from each model with the two-dimensional model as the reference. The two-dimensional model is a major improvement over the zero- and one-dimensional models by all measures. The three-dimensional model is a small improvement over the two-dimensional model. However, the correlation in ratings between the two and three-dimensional models is extremely high (0.9991). The combination of a modest decrease in BIC with increased difficulty of visualizing three-dimensional estimates led us to select the two-dimensional model. (Although we did not  BICM estimates is not of primary interest here, we did calculate a bootstrap estimate of the standard error in $BICM_{\hat{d}}$ due to MCMC sampling variation and found it to be small relative to differences between models. Variation in $BICM_{p_D}$ is even smaller as long as samples are fairly large.)
+Table \ref{BIC.table} shows, from left to right, a traditional BIC estimate with parameter dimension equal to the number of parameters and sample size equal to $n*(n-1)$; BICM using $\hat{d}$; BICM using $p_D$; the $\hat{d}$ and $p_D$ estimates of parameter dimension; and the correlation in ratings from each model with the two-dimensional model as the reference. The two-dimensional model is a major improvement over the zero- and one-dimensional models by all measures. The three-dimensional model is a small improvement over the two-dimensional model. However, the correlation in ratings between the two and three-dimensional models is extremely high (0.9991). These factors combined with the increased difficulty of visualizing three-dimensional estimates leads us to select the two-dimensional model. (Although the error of BICM estimates is not of primary interest here, bootstrap estimates of the standard error in $BICM$ due to MCMC sampling variation show that it is small relative to differences between models.)
 
 \subsubsection{Model Fit} \label{dim}
 
-The latent space and quasi-Stigler models produce roughly equivalent journal rankings, but how well do they model the observed network? We consider several elements of the fit of our latent space model, especially as they compare to the quasi-Stigler model.
+The latent space and quasi-Stigler models produce roughly equivalent journal rankings, but how well do they model the observed network? We consider elements of the fit of our two-dimensional latent space model in comparison to the quasi-Stigler model.
 
-<<residuals, eval = T, cache = T, message =F, warning = F, results = 'hide', echo = F, dependson = c("glm"), fig.height = 3, fig.cap = 'Comparison of model residuals. Left: Residuals are ordered by size and only the range from -25 to 25 is shown to enhance detail. Right: Residuals are ordered by weight of the corresponding edge and a linear model is fit to each set.', fig.pos = 'H'>>=
+Figure \ref{fig:residuals} (left) displays model residuals ordered by the value of the underlying edge, i.e. number of citations, for a Poisson sender-receiver model with no latent positions (D = 0), the two-dimensional latent space model (D = 2), and the quasi-Stigler model. We include the zero-dimensional model to help distinguish the impact of modeling edge weights as Poisson from the effect of adding positions. The quasi-Stigler model has the smallest residuals overall ($SD = 2.2$), which we expect since the model is constrained by dyad totals. The two-dimensional latent space model is a bit worse ($SD = 3.7$), but of course much better than the no-position model ($SD = 8.8$). The no-position model is systematically biased, in that edges with lower citation counts are more likely to be overestimated, and heavier edges more likely to be underestimated. This pattern is evident in the other two models, but much less severe. Examining high-value edges underestimated by the two-dimensional model reveals that they are outliers relative to the citation patterns of the underlying journals. They may be a result of the long-tailed distribution of citation counts per article, but we do not have access to the itemized counts to investigate further. There may be additional covariates that we could add to the model to account for these seeming outliers. We also note that by far the highest-valued edge in the network is from \textit{Statistics in Medicine} to \textit{Biometrika}. These journals are related to biological sciences, a field with much higher average citations counts than statistics \citep{if_fraction}. This hints at the importance of a model extension to account for differing activity patterns within journal fields. Although the data for related fields is not currently available for publication, we revisit relevant model extensions in the discussion.
+
+<<residuals, eval = T, cache = T, message =F, warning = F, echo = F, dependson = c("glm"), fig.width = 6, fig.height = 2.5, fig.align="center", results = "hide", fig.cap = 'Comparison of residuals (2160) for models in zero and two dimensions and the quasi-Stigler model. Left: Residuals ordered by value of the corresponding edge. A linear model is fit to each set. Right: Pearson residuals for Poisson models. The highest fitted left out to enhance detail.', fig.pos = 'H'>>=
 
 # g1 (quasi stigler, or quassibinomial glm) ####
 
-# under most likely graph | theta point estimate
-# fitted.values for upper.tri: 2,1 3,1 ... 3,2, 4,2, ... 47,46
-# this is because of how the response were listed in g1
+# g1.res = residuals for expected graph | theta point estimate
 
-#QSmat is the most likely graph (as matrix) under quasi-Stigler
 QSmat = matrix(0, 47, 47)
-QSmat[lower.tri(QSmat)] = (Tmatrix[lower.tri(Tmatrix)])*g1$fitted.values
+QSmat[lower.tri(QSmat)] = (Tmatrix[lower.tri(Tmatrix)])*g1$fitted.values # fitted.values are for upper.tri: 2,1 3,1 ... 3,2, 4,2, ... 47,46 because of how the responses were listed in g1
 QSmat = t(QSmat)
 QSmat[lower.tri(QSmat)] = (Tmatrix[lower.tri(Tmatrix)])*(1-g1$fitted.values)
 QSmat = t(QSmat)
@@ -2025,40 +1972,31 @@ g1.res = QSmat - t(Cmatrix); diag(g1.res) = NA
 
 # latent model without positions ####
 model = latent.srp0
-R0 = predict(model) - model$model$Ym; diag(R0) = rep(NA, nrow(model$model$Ym))
-#hist(R0, breaks = 100, col = "green", prob = T, ylim = c(0,.25), xlim = c(-50,50))
+R0 = predict(model, type = "mkl") - model$model$Ym; diag(R0) = rep(NA, nrow(model$model$Ym))
 
 # latent model with 2-D positions ####
 model = latent.srp2.init.r
 R2 = predict(model, type = "mkl") - model$model$Ym; diag(R2) = rep(NA, nrow(model$model$Ym))
-#hist(R2, breaks = 20, add = T, col = "red", prob = T, density = 30)
-#Y = t(Cmatrix); diag(Y) = NA; plot(log(as.vector(R2))[order(as.vector(Y))])
-#Y = predict(model, type = "mkl") ; diag(Y) = NA; plot(x = as.vector(Y), y = as.vector(R2))
 
 # other models with positions ####
 #model = latent.srp1
 #R1 = predict(model, type = "mkl") - model$model$Ym; diag(R1) = rep(NA, nrow(model$model$Ym))
 
-#model = latent.srp3
-#R3 = predict(model, type = "mkl") - model$model$Ym; diag(R3) = rep(NA, nrow(model$model$Ym))
-
-#R = data.frame(residual = c(as.vector(g1.res), as.vector(R0),
- #                           as.vector(R2), as.vector(R1), as.vector(R3)),
-  #             model = as.factor(c(rep("QS", 2209), rep("D = 0", 2209), rep("D = 2", 2209), 
-   #                                rep("D = 1", 2209), rep("D = 3", 2209))),
-    #           edgeweight = rep(as.vector(t(Cmatrix)), 5),
-     #          order = c(rank(g1.res), rank(R0), rank(R2), rank(R1), rank(R3)))
+model = latent.srp3.init.r
+R3 = predict(model, type = "mkl") - model$model$Ym; diag(R3) = rep(NA, nrow(model$model$Ym))
 
 # Summary ####
-summary(as.vector(g1.res))
-summary(as.vector(R0))
-summary(as.vector(R2))
+
+sd(g1.res, na.rm = T); sd(R0, na.rm = T);  sd(R2, na.rm = T)
+quantile(g1.res, na.rm = T, c(.05, .95)); quantile(R0, na.rm = T, c(.05, .95)); quantile(R2, na.rm = T, c(.05, .95))
+
 R = data.frame(residual = c(as.vector(g1.res), as.vector(R0), as.vector(R2)),
                model = as.factor(c(rep("QS", 2209), rep("D = 0", 2209), rep("D = 2", 2209))),
                edgeweight = rep(as.vector(t(Cmatrix)), 3),
                order = c(rank(g1.res, ties.method = "random"),
                          rank(R0, ties.method = "random"),
                          rank(R2, ties.method = "random")))
+
 # Sorted Residual Plot ####
 res_vs_index = ggplot(R, aes(x = order, y = residual, color = model)) + 
   geom_hline(yintercept = 0, col = "gray") +
@@ -2067,78 +2005,54 @@ res_vs_index = ggplot(R, aes(x = order, y = residual, color = model)) +
   theme(legend.position="none") +
   ggtitle("Ordered Residuals")
 
-#ggplot(data = R, aes(x = residual, fill = model, col = model)) +
- # geom_histogram(binwidth = c(1), position = "identity") +
-  #theme_bw() + theme(legend.position = "none") + 
-  #facet_wrap(~model, scales = "free_x")
-
 # Residuals vs. Edge Weight Plot  ####
 # not surprisingly, quasi fits best bc binomial model assumes totals (Tmatrix) known
 res_vs_edge = ggplot(R, aes(x = edgeweight, y = residual, color = model)) + 
   geom_hline(yintercept = 0, col = "gray") +
-  geom_point(size = .5, alpha = .8) +
+  geom_point(size = .5, alpha = .5) +
   geom_smooth(method = "lm", se = F, size = .5) +
   theme_bw() + 
-  guides(fill = F) +
-  ggtitle("Residuals vs. Edge Weight") #+ facet_wrap(~model, scales = "free_x")
+  theme(legend.position = c(.65,.9), legend.text = element_text(size = 7),
+        legend.key = element_rect(fill = "transparent"),
+        legend.background=element_rect(fill="transparent"),
+        legend.direction="horizontal",
+        legend.title = element_blank()) +
+  xlab("edge value") +
+  ggtitle("Residuals vs. Edge Value") #+ facet_wrap(~model, scales = "free_x")
 
 # Overdispersion? ####
 #Is there overdispersion in the poisson models? We plot the Pearson residuals:
 
-data1 = data.frame(fitted2 = predict(latent.srp2.init.r)[!is.na(R2)],
-                   pearson2 = as.vector(R2[!is.na(R2)]/sqrt(predict(latent.srp2.init.r)[!is.na(R2)])),
-                   fitted0 = predict(latent.srp0)[!is.na(R0)],
-                   pearson0 = as.vector(R0[!is.na(R0)]/sqrt(predict(latent.srp0)[!is.na(R0)])))
+data1 = data.frame(fitted2 = predict(latent.srp2.init.r, type = "mkl")[!is.na(R2)], #removes diag
+                   pearson2 = as.vector(R2[!is.na(R2)]/
+                                  sqrt(predict(latent.srp2.init.r, type = "mkl")[!is.na(R2)])),
+                   fitted3 = predict(latent.srp2.init.r, type = "mkl")[!is.na(R3)],
+                   pearson3 = as.vector(R3[!is.na(R3)]/
+                                  sqrt(predict(latent.srp2.init.r, type = "mkl")[!is.na(R3)])))
+                   #fitted0 = predict(latent.srp0)[!is.na(R0)],
+                   #pearson0 = as.vector(R0[!is.na(R0)]/sqrt(predict(latent.srp0)[!is.na(R0)])))
 
-data1 = reshape::melt(data1, measure.vars = c("fitted0", "fitted2"))
-
-res_vs_fitted = ggplot(data1, aes(color = variable, x = value, y = pearson0)) +
-  geom_point(size = .5) + theme_bw() + ggtitle("Residuals vs. Fitted") +
+res_vs_fitted = ggplot(data1) +
+  #geom_point(aes(color = hue_pal()(3)[2], x = fitted3, y = pearson3),
+   #          size = .5, alpha = .5, inherit.aes = F) +
+   geom_point(aes(color = hue_pal()(3)[1], x = fitted2, y = pearson2),
+           size = .5, alpha = .5, inherit.aes = F) +
+  theme_bw() + ggtitle("Residuals vs. Fitted") +
   theme(legend.position = "none") +
   ylab("Pearson residual") + xlab("fitted value") + xlim(0,150) +
-  scale_color_manual(values = c(hue_pal()(3)[1:2]))
+  scale_color_manual(values = c(hue_pal()(3)[2]))
 
 
 # PLOT ####
-cowplot::plot_grid(res_vs_index, res_vs_fitted, res_vs_edge, rel_widths = c(.75, .75, 1), nrow = 1)
-# Treat 0 as missing edges? ####
-#Concerned about the number of underpredictios for fitted values of zero I tried fitting the network treating zero edges as missing. The basic patter was still there though. 
 
-#par(mfrow = c(1,2))
+cowplot::plot_grid(res_vs_edge, res_vs_fitted, rel_widths = c(1, .8), nrow = 1)
+# left out res_vs_index: Residuals ordered by size and only the range from -25 to 25 is shown to enhance detail.
 
-#plot(as.vector(predict(latent.srp2.init.r)),
- #    as.vector(R2)/sqrt(as.vector(predict(latent.srp2.init.r))), xlim = c(0,150))
-
-#model = latent.srp2.missing
-#R2m = predict(model) - model$model$Ym; diag(R2m) = rep(NA, nrow(model$model$Ym))
-#plot(as.vector(predict(model)[t(Cmatrix)>0]),
- #    as.vector(R2m[t(Cmatrix)>0])/sqrt(as.vector(predict(model)[t(Cmatrix)>0])), xlim = c(0,150))
-
-
-@
-
-Figure \ref{fig:residuals} (left) displays sorted residuals based on point estimates from the two-dimensional latent space model (D = 2), a Poisson sender-receiver model with no latent positions (D = 0), and the quasi-Stigler model. The quasi-Stigler model has the smallest residuals overall, which we expect since the model is constrained by dyad totals. We include the no-position model because it helps to distinguish the impact of using a Poisson model from the effect of adding positions.
-
-The two-dimensional latent position model is a clear improvement on the same model without positions. As a summary measure, we estimate expected posterior deviance, $E_{\theta|Y_{obs}}[-2log(P(Y_{obs}|\theta))]$, by averaging over the MCMC sample. It drops from $-52912$ to $-58766$ when we add two-dimensional positions. (The standard deviations of the posterior deviances are 19 and 13 respectively.) The right plot of Figure \ref{fig:residuals} orders residuals by weight of the underlying edge. The no-position model is systematically biased, as edges with lower citation counts are more likely to be underestimated, and heavier edges more likely to be underestimated. This pattern is evident in the other two models, but much less severe. Examining the underestimated edges with high edge weight confirms that they represent outliers relative to how much they typically cite or are cited. This may be a result of the long-tail distribution of citation counts, with a few papers that are relevant to specific journal sub-fields driving these values up. We do not have access to the itemized counts to investigate this further, but if we find a systematic cause we could add a covariate to the model to capture additional features.
-
-<<latent_deviance, eval = T, cache = T, echo = F,  message = F, results = "hide">>=
-lgamma.constant = sum(lgamma(as.vector(Cmatrix+1)))
-# Expected deviance 
-ED0 = mean(-2*(latent.srp0$sample$lpY + lgamma.constant))
-ED2 = mean(-2*(latent.srp2.init.r$sample$lpY + lgamma.constant))
-#DIC estimation ####
-pd0 = ED0 + 2*llik(latent.srp0$mkl, Z = matrix(0, 47, 2), Y = t(Cmatrix), est = "Y")
-      #(latnet.srp0$mcmc.mle$lpY + lgamma.constant)
-pd2 = ED2 + 2*llik(latent.srp2.init.r$mkl, Y = t(Cmatrix), est = "Y")
-      #(latnet.srp2$mcmc.mle$lpY + lgamma.constant)
-DIC0 = pd0 + ED0
-DIC2 = pd2 + ED2
-
-sd(-2*(latent.srp0$sample$lpY + lgamma.constant))
-sd(-2*(latent.srp2.init.r$sample$lpY + lgamma.constant))
 @
 
 <<residuals2, eval = F, echo = F>>=
+
+#to view outliers of sender and receiver distributions
 library(reshape)
 Y = data.frame(t(Cmatrix))
 Y = melt(Y); colnames(Y) = c("journal", "citations")
@@ -2148,79 +2062,22 @@ Y = data.frame(Cmatrix)
 Y = melt(Y); colnames(Y) = c("journal", "citations")
 sender_dist = ggplot(data = Y, aes(x = journal, y = citations, color = journal)) + geom_boxplot() + theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) + ggtitle("sender distributions")
 
-#ggplot(Y, aes(x = citations, y = journal)) + geom_joy() + xlim(0, 50)
-
+ggplot(Y, aes(x = citations, y = journal)) + geom_joy() + xlim(0, 50)
 cowplot::plot_grid(sender_dist, receiver_dist)
 @
 
+The right-hand plot of Figure \ref{fig:residuals} displays Pearson residuals against fitted values for the two-dimensional model. There is heightened variation where fitted values are close to zero and residuals must be negative. Although these mostly correspond to small absolute differences, the standardized scale reveals a lack of fit. To acccount for this in future implementations we could add a small constant to the citiation data matrix to stabilize the model for low counts. The underlying assumption is that all statistics journals in the network have at least a small chance of exchanging citations. Outside the near-zero area, the model spread appears roughly constant given the amount of data across fitted values, and does not appear overdispersed.
+
 %3). Structure, reciprocity 
 
-We also evaluate model fit through a posterior predictive check of network reciprocity. Given the high reciprocity observed between journals and its influence on rankings, we are interested in whether this has been captured by the models. We employ a version of the reciprocity statistic defined by \citet{newman10}, adjusted for weighted networks. We consider both a normalized and unnormalized version to examine the impact of fixing dyad totals. 
+Although dyad-total constraints in the quasi-Stigler model lower the residuals, they also restrict the space of simulated networks. To further compare the model fits we conduct a posterior predictive check on a feature of interest, network reciprocity. We employ a version of the reciprocity statistic defined by \citet{newman10}, which we adapt for weighted networks,
 
 \begin{equation}
-reciprocity(Y) = \frac{\sum_{ij}Y_{ij}*Y_{ji}}{\sum_{ij}(\frac{Y_{ij}+Y_{ji}}{2})^2}
+reciprocity(Y) = \frac{\sum_{i \neq j}y_{ij}*y_{ji}}{\sum_{i \neq j}(\frac{y_{ij}+y_{ji}}{2})^2}.
 \end{equation}
 
-The value is zero for a completely imbalanced network and one for a perfectly symmetrical one. The denominator controls for the influence of variation in the dyad totals. The unnormalized version removes the denominator. Figure \ref{fig:structure_reciprocity_plot} (top) shows the observed reciprocity as a vertical line and simulated reciprocity based on posterior parameter distributions for the two Poisson models (D = 0 and D = 2), and based on the point estimate for the quasi-Stigler model. To simulate networks from the quasi-Stigler model we use a beta-binomial approximation with mean and variance matching the overdispersed binomial. The left panel shows normalized reciprocity while the right panel shows unnormalized values. 
+\noindent The value of the statistic ranges from zero to one, achieving the maximum if the network is symmetric. The denominator controls for the influence of variation in the dyad totals. We also consider an unnormalized version with the denominator removed. Figure \ref{fig:structure_reciprocity_plot} shows simulated reciprocity statistics based on a MKL point estimate for the two-dimensional latent space model; the posterior parameter distribution of the two-dimensional latent space model; and the point estimate for the quasi-Stigler model. To simulate networks from the quasi-Stigler model we use a beta-binomial approximation with mean and variance matching the overdispersed binomial. The left panel shows reciprocity while the right panel shows unnormalized values. 
 
-The average reciprocity estimates are very similar for the two-dimensional and quasi-Stigler models. However, the variance of the two-dimensional model is slightly larger for normalized reciprocity and much larger for unnormalized (standard deviation of 14081 vs. 3628). As a result, the two-dimensional latent space model includes the observed value in its simulated range in both cases (p-values 0.008 (left) and 0.209 (right)), showing more appropriate model uncertainty. Only a fraction of this difference is due to the use of the posterior sample instead of a point estimate. Figure \ref{fig:structure_reciprocity_plot2} compares the distributions for D = 2 shown in Figure \ref{fig:structure_reciprocity_plot} to one for draws from the MKL parameter estimate. The variance from the point estimate is a little bit smaller (p-values drop to 0 and 0.156). The no-position Poisson model provides a lower estimate of normalized reciprocity since it lacks the symmetric effect of positions, but badly underestimates the unnormalized version, as it underestimates high edge values in general. 
-
-<<sim_point_post, eval = F, echo = F, warning = F, message = F>>=
-
-library(intergraph)
-
-# the simulate.ergmm function randomly picks an mcmc sample to use for simulatution, i.e. simulating from the posterior distribution. ( models with no mcmc sample, e.g only "mle" fit, can't use simulate.ergmm)
-
-# 1 simulate from point estimate - how much less varaibility? ####
-
-model = latent.srp2.init.r
-lambda.mkl = exp(model$mkl$receiver + t(model$mkl$sender -
-                dist2(model$mkl$Z)) + model$mkl$beta); diag(lambda.mkl) = 0
-
-nsim = 50
-tmp = matrix(0,2209, nsim)
-# average sets of graphs for each to smooth the poisson, i.e. nsim = nsim^2
-for (i in 1:nsim) {
-  tmp.j = matrix(0,2209, nsim)
-  for (j in 1:nsim) {
-    mat = matrix(rpois(2209, lambda), ncol = 47, nrow = 47); diag(mat) = NA
-    tmp.j[,j] = mat - t(Cmatrix)
-  }
-  tmp[,i] = rowMeans(tmp.j)
-}
-tmp = apply(tmp, 1, quantile, c(.025,.25,.5,.75,.975), na.rm = TRUE)
-tmp = tmp[,!is.na(tmp[1,])]
-tmp = tmp[,order(tmp[3,])]
-plot(tmp[3,s], type = "l")
-points(tmp[1,s], type = "l")
-points(tmp[5,s], type = "l")
-
-# 2 simulate from graph posterior draw - slightly more variability (same as simulate function but this is for transparency) ####
-
-nsim = 50
-tmp1 = matrix(0,2209, nsim)
-for (i in 1:nsim) {
-  k = sample(1:length(model$sample$lpY), 1)
-  lambda = exp(model$sample$receiver[k,] +
-                 t(model$sample$sender[k,] -
-                  dist2(model$sample$Z[k,,])) +
-                 model$sample$beta[k])
-  tmp1.j = matrix(0,2209, nsim)
-  for (j in 1:nsim) {
-    mat = matrix(rpois(2209, lambda), ncol = 47, nrow = 47); diag(mat) = NA
-    tmp1.j[,j] = mat - t(Cmatrix)
-  }
-  tmp1[,i] = rowMeans(tmp1.j)
-}
-tmp1 = apply(tmp1, 1, quantile, c(.025,.25,.5,.75,.975), na.rm = TRUE)
-tmp1 = tmp1[,!is.na(tmp1[1,])]
-tmp1 = tmp1[,order(tmp1[3,])]
-points(tmp1[3,s], type = "l", col = "red")
-points(tmp1[1,s], type = "l", col = "red")
-points(tmp1[5,s], type = "l", col = "red")
-
-@
- 
 <<structure_reciprocity, eval = T, echo = F, cache = T, message =F, warning = F, results = 'hide', fig.height = 4>>=
 
 reciprocity = function(A, normalize = T) {
@@ -2228,87 +2085,116 @@ reciprocity = function(A, normalize = T) {
   else {sum(A*t(A), na.rm = T)}
 }
 
-nsim = 1000
+nsim = 5000
+nsim.iter = 500 #can't do all at once
+rounds = nsim/nsim.iter
 
 # 1. unnormalized ####
-
 Q = reciprocity(t(Cmatrix), normalize = F)
 
 # Poisson, QS
-g = simulate.qs(g1, nsim = nsim)
-#g = lapply(g, round)
-tmp.qs = unlist( lapply(g, reciprocity, normalize = F))
-
-# Poisson, D = 0
-sim0 = simulate(latent.srp0, nsim) #draws from the posterior
-tmp0 = unlist(lapply(sim0[[2]], function(x) {reciprocity(as.sociomatrix(x, attrname = "citations"), normalize = F)}) )
+tmp.qs = c()
+for (i in 1:rounds) {
+  g = simulate.qs(g1, nsim = nsim.iter)
+  #g = lapply(g, round)
+  tmp = unlist( lapply(g, reciprocity, normalize = F))
+  tmp.qs = c(tmp.qs, tmp)
+}
 
 # Poisson, D = 2
-sim2 = simulate(latent.srp2.init.r, nsim) #draws from the posterior
-tmp2 = unlist(lapply(sim2[[2]], function(x) {reciprocity(as.sociomatrix(x, attrname = "citations"), normalize = F)}) )
+# the simulate.ergmm function randomly picks an mcmc sample to use for simulatution, i.e. simulating from the posterior distribution.
+tmp2 = c()
+for (i in 1:rounds) {
+  sim2 = simulate(latent.srp2.init.r, nsim.iter)
+  tmp = unlist(lapply(sim2[[2]], function(x) {reciprocity(as.sociomatrix(x, attrname = "citations"), normalize = F)}) )
+  tmp2 = c(tmp, tmp2)
+}
 
 # Poisson, D = 2, MKL point estimate
 model = latent.srp2.init.r
 lambda.mkl = exp(model$mkl$receiver + t(model$mkl$sender -
                 dist2(model$mkl$Z)) + model$mkl$beta); diag(lambda.mkl) = 0
 tmp2mkl = rep(0, nsim)
-for (i in 1:nsim) {
+for (i in 1:(nsim)) {
   mat = matrix(rpois(2209, lambda.mkl), ncol = 47, nrow = 47); diag(mat) = 0 #0 instea of NA. NA causes all mod values to go to 0
   tmp2mkl[i] = reciprocity(mat, normalize = F)
 }
-
-# the simulate.ergmm function randomly picks an mcmc sample to use for simulatution, i.e. simulating from the posterior distribution.
-
-
 
 
 # 2. normalized ####
 Q.norm = reciprocity(t(Cmatrix), normalize = T)
 
-# Poisson, QS
-tmp.qs.norm = unlist( lapply(g, reciprocity, normalize = T))
-tmp0.norm = unlist(lapply(sim0[[2]], function(x) {reciprocity(as.sociomatrix(x, attrname = "citations"), normalize = T)}) )
-tmp2.norm = unlist(lapply(sim2[[2]], function(x) {reciprocity(as.sociomatrix(x, attrname = "citations"), normalize = T)}) )
+# QS
+tmp.qs.norm = c()
+for (i in 1:rounds) {
+  g = simulate.qs(g1, nsim = nsim.iter)
+  #g = lapply(g, round)
+  tmp = unlist( lapply(g, reciprocity, normalize = T))
+  tmp.qs.norm = c(tmp.qs.norm, tmp)
+}
+
+# Poisson, D = 2
+# the simulate.ergmm function randomly picks an mcmc sample to use for simulatution, i.e. simulating from the posterior distribution.
+tmp2.norm = c()
+for (i in 1:rounds) {
+  sim2 = simulate(latent.srp2.init.r, nsim.iter)
+  tmp = unlist(lapply(sim2[[2]], function(x) {reciprocity(as.sociomatrix(x, attrname = "citations"), normalize = T)}) )
+  tmp2.norm = c(tmp, tmp2.norm)
+}
+
+# Poisson, D = 2, MKL point estimate
 tmp2mkl.norm = rep(0, nsim)
-for (i in 1:nsim) {
+for (i in 1:(nsim)) {
   mat = matrix(rpois(2209, lambda.mkl), ncol = 47, nrow = 47); diag(mat) = 0 #0 instea of NA. NA causes all mod values to go to 0
   tmp2mkl.norm[i] = reciprocity(mat, normalize = T)
 }
 
-# the simulate.ergmm function randomly picks an mcmc sample to use for simulatution, i.e. simulating from the posterior distribution.
-
-
-
+rm(sim2); rm(g)
 @
 
-<<structure_reciprocity_plot, eval = T, echo = F, cache = T, message =F, warning = F, fig.height = 2, fig.width = 6, fig.pos = 'H', fig.cap = "Comparison of simulated reciprocity distributions based on 1000 simulations" >>=
+<<structure_reciprocity_plot, eval = T, echo = F, cache = T, message =F, warning = F, fig.height = 2.5, fig.width = 6, fig.align = "center", fig.pos = 'H', fig.cap = "Comparison of simulated reciprocity distributions based on 5000 simulations" , dependson = c("structure_reciprocity")>>=
 
-rec.data = data.frame(model = c(rep("QS", nsim), rep("D = 0", nsim), rep("D = 2", nsim)), 
-                      reciprocity = c(tmp.qs, tmp0, tmp2))
-recplot1 = ggplot(rec.data, aes(x = reciprocity, fill = model)) +
-  geom_histogram(position = "identity", bins = 40) +
-  geom_vline(xintercept = Q, color = "gray", show.legend = T) + 
-  geom_text(x=Q, label="observed", y = 250, colour="gray", angle=90, vjust = -.2, size=3) +
-  geom_hline(yintercept = 0, col = "gray", size = .3) +
-  theme_bw() +
-  ggtitle("Reciprocity") +  labs(x = NULL)
-  
-rec.data = data.frame(model = c(rep("QS", nsim), rep("D = 0", nsim), rep("D = 2", nsim)), 
-                      normalized_reciprocity = c(tmp.qs.norm, tmp0.norm, tmp2.norm))
-recplot1.norm = ggplot(rec.data, aes(x = normalized_reciprocity, fill = model)) +
-  geom_histogram(position = "identity", bins = 40) +
+rec.data = data.frame(model = c(rep("QS", nsim), rep("D = 2", nsim),
+                                rep("D = 2, posterior", nsim)), 
+                      normalized_reciprocity = c(tmp.qs.norm, tmp2mkl.norm, tmp2.norm)) 
+
+recplot1.norm = ggplot(rec.data, aes(x = normalized_reciprocity, color = model)) +
+  geom_freqpoly(size = .75, aes(linetype = model)) + 
+  scale_linetype_manual(values=c("solid", "dashed", "solid"))+
   geom_vline(xintercept = Q.norm, color = "gray", show.legend = T) + 
-  geom_text(x=Q.norm, label="observed", y = 80, colour="gray", angle=90, vjust = -.2, size=3) +
+  geom_text(x=Q.norm, label="observed", y = 500, colour="gray", angle=90, vjust = -.2, size=3) +
   geom_hline(yintercept = 0, col = "gray", size = .3) +
   theme_bw() + 
   theme(legend.position = "none") +
-  ggtitle("Normalized Reciprocity") + labs(x = NULL)
+  scale_color_manual(values = c(hue_pal()(3)[2], hue_pal()(8)[8], hue_pal()(3)[3])) +
+  ggtitle("Reciprocity") + labs(x = NULL) 
+
+rec.data = data.frame(model = c(rep("QS", nsim), rep("D = 2", nsim), rep("D = 2,\nposterior", nsim)), 
+                      reciprocity = c(tmp.qs, tmp2mkl, tmp2))
+
+recplot1 = ggplot(rec.data, aes(x = reciprocity, color = model)) +
+  geom_freqpoly(size = .75, aes(linetype = model)) + 
+  scale_linetype_manual(values=c("solid", "dashed", "solid"))+
+  geom_vline(xintercept = Q, color = "gray", show.legend = T) + 
+  geom_text(x=Q, label="observed", y = 1400, colour="gray", angle=90, vjust = -.2, size=3) +
+  geom_hline(yintercept = 0, col = "gray", size = .3) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8),
+        legend.position = c(.8,.9), legend.text = element_text(size = 7),
+        legend.key = element_rect(fill = "transparent"),
+        legend.background=element_rect(fill="transparent"),
+        legend.title = element_blank()) +
+  scale_color_manual(values = c(hue_pal()(3)[2], hue_pal()(8)[8], hue_pal()(3)[3])) +
+  ggtitle("Unnormalized Reciprocity") +  labs(x = NULL)
+
 
 cowplot::plot_grid(recplot1.norm, recplot1, rel_widths = c(.8, 1), nrow = 1)
 
 @
 
-<<structure_reciprocity_plot2, eval = T, echo = F, cache = T, message =F, warning = F, fig.height = 2, fig.width = 6, fig.pos = 'H', fig.cap = "Comparison of simulated reciprocity distributions for two-dimensional Poisson posterior and MKL point estimate based on 1000 simulations" >>=
+The average reciprocity estimates are similar across models and biased to the right. This is likely due to the underestimation of high-valued outliers. However, the variance is larger for the two-dimensional models, especially for unnormalized reciprocity. As a result, only the two-dimensional models include the observed values in their simulated ranges. For reciprocity, the percents of simulated values to the left of the observed value are 0.012 and 0.001 for the posterior distribution and point estimate respectively; for unnormalized reciprocity they are 0.19 and 0.15. The quasi-Stigler model is overly restrictive in that simulations from the model do not include the observed network with respect to this statistic.
+
+<<structure_reciprocity_plot2, eval = F, echo = F, cache = T, message =F, warning = F, fig.height = 2, fig.width = 6, fig.pos = 'H', fig.cap = "Comparison of simulated reciprocity distributions for two-dimensional Poisson posterior and MKL point estimate based on 1000 simulations" >>=
 
 # Compare modularity distribution from simulating from MKL point estimate vs. posterior distribution
 
@@ -2319,8 +2205,6 @@ rec.data = data.frame(model = c(rep("D = 2", nsim), rep("D = 2, mkl", nsim)),
 recplot2.norm = ggplot(rec.data, aes(x = reciprocity, fill = model)) +
   geom_histogram(position = "identity", bins = 40) +
   geom_vline(xintercept = Q.norm, color = "gray", show.legend = T) + 
-  geom_text(x=Q.norm, label="observed", y = 65, colour="gray", angle=90,
-            vjust = -.2, size=3) +
   theme_bw() + facet_wrap(~model, scales = "fixed") + 
   theme(legend.position = "none") + 
   geom_hline(yintercept = 0, col = "gray", size = .3) +
@@ -2334,8 +2218,6 @@ rec.data = data.frame(model = c(rep("D = 2", nsim), rep("D = 2, mkl", nsim)),
 recplot2 = ggplot(rec.data, aes(x = reciprocity, fill = model)) +
   geom_histogram(position = "identity", bins = 40) +
   geom_vline(xintercept = Q, color = "gray", show.legend = T) + 
-  geom_text(x=Q, label="observed", y = 80, colour="gray", angle=90,
-            vjust = -.2, size=3) +
   theme_bw() + facet_wrap(~model, scales = "fixed") + 
   theme(legend.position = "none") +
   scale_x_discrete(limits=c(360000, 400000) )+
@@ -2347,97 +2229,235 @@ cowplot::plot_grid(recplot2.norm, recplot2, rel_widths = c(1, 1), nrow = 1)
 
 @
 
-<<structure_reciprocity_stats, eval = F, echo = F >>=
-sum(tmp2<Q)
-sum(tmp2mkl<Q)
-sum(tmp.qs.norm<Q.norm)
-sum(tmp0.norm<Q.norm)
-sum(tmp2.norm<Q.norm)
-sum(tmp2mkl.norm<Q.norm)
+<<structure_reciprocity_stats, eval = F, echo = F>>=
+nsim
+sum(tmp2<Q)/nsim
+sum(tmp2mkl<Q)/nsim
+sum(tmp.qs<Q)/nsim
+sum(tmp2.norm<Q.norm)/nsim
+sum(tmp2mkl.norm<Q.norm)/nsim
+sum(tmp.qs.norm<Q.norm)/nsim
 
-mean(tmp.qs)
-mean(tmp2)
-mean(tmp2mkl)
-mean(tmp.qs.norm)
-mean(tmp2.norm)
+c(mean(tmp2), mean(tmp2mkl), mean(tmp.qs), mean(tmp2.norm), mean(tmp2mkl.norm), mean(tmp.qs.norm))
 
-sd(tmp.qs)
-sd(tmp0)
-sd(tmp2)
-sd(tmp2mkl)
-sd(tmp2.norm)
-sd(tmp2mkl.norm)
+c(sd(tmp2), sd(tmp2mkl), sd(tmp.qs), sd(tmp2.norm), sd(tmp2mkl.norm), sd(tmp.qs.norm))
 
 @
 
-<<structure_exp_trans, eval = F, echo = F, cache = T, message =F, warning = F, results = 'hide'>>=
+\subsubsection{Comparison of Estimation Methods} \label{estimeval}
 
-#Leave out transitive structure section - the statistic doesn't seem to capture what we would be interested in regarding transitivity for these nets. Also odd that the basic model overestimates transitivity by this metric.
+We now turn to the comparison of estimation methods for the latent space model. We illustrate that quasi-Netwon optimization returns item rankings and positional estimates nearly identical to MCMC results in much less time. 
 
-# Some experimental structure stats for hierarchy and transitivity.
-# Probalby won't include
+<<compare_latent_models, eval = T, echo = F, cache=T, results='asis', cache.comments = FALSE, warning= FALSE, dependson = c("latent_sr2_init_r", "latent_sr2", "latent_qn")>>=
 
-# hierarchy ####
-# exphi is measure for each node (i) the weighted average of citations received for nodes (j) i is connected to
-# weighted by normalized out-citations for i.
-exphi <- function(mat) {
-  v = ( mat*(1/rowSums(mat)) ) %*% colSums(mat)
-  v = sort(v)
+results.table = data.frame(row.names = c("QN (L-BFGS-B)", "MCMC (MKL)", "MCMC.init.r (MKL)" ))
+
+results.table$"Time (min)" = c("$<1$", round(t2.srp2 - t1.srp2), round(t2.init.r - t1.init.r))
+
+results.table$"$l(Y|\\hat{\\theta})$" = as.character(round(
+                                c(llik(latent.srp2.init.r$burnin.start, Y = t(Cmatrix), est = "Y"),
+                                #latentnet finds a conditional posterior mode using optim before burnin
+                                llik(latent.srp2$mkl, Y = t(Cmatrix), est = "Y"),
+                                llik(latent.srp2.init.r$mkl, Y = t(Cmatrix), est = "Y"))))
+results.table$"$l(\\hat{\\theta})$" = as.character(round(
+                                c(llik(latent.srp2.init.r$burnin.start, Y = t(Cmatrix), est = "theta"),
+                                with(latent.srp2$mcmc.mle, llik(latent.srp2$mkl,
+                                     Y = t(Cmatrix), sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
+                                with(latent.srp2.init.r$mcmc.mle, llik(latent.srp2.init.r$mkl,
+                                     Y = t(Cmatrix), sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")))))
+results.table$"$l(\\hat{\\theta}|Y)$" = as.character(as.numeric(results.table$"$l(Y|\\hat{\\theta})$") + as.numeric(results.table$"$l(\\hat{\\theta})$"))
+
+latent2 = latent.srp2.init.r$mkl$receiver - latent.srp2.init.r$mkl$sender
+results.table$"Rating Cor." = c(cor(latent2, latent.srp2.init.r$burnin.start$receiver - 
+                                            latent.srp2.init.r$burnin.start$sender),
+                               cor(latent2, latent.srp2$mkl$receiver - latent.srp2$mkl$sender),
+                               cor(latent2, latent.srp2.init.r$mkl$receiver - 
+                                            latent.srp2.init.r$mkl$sender))
+
+print(xtable(results.table, caption = "Estimation methods. The $ell$ function in the column titles indicates the log of the probability.", digits = 4, label = "results.table"), caption.placement = "top", sanitize.text.function=function(x){x})
+
+# MCMC diagnostics ####
+
+  # these all look fine
+  # mcmc.diagnostics(latent.srp2)
+  # mcmc.diagnostics(latent.srp2.init.r)
+  # mcmc.diagnostics(latent.srp2.init.r.sann)
+
+# Other estimates ####
+# est = "Y"
+# llik(latent.srp2.init.r$mcmc.mle, Y = t(Cmatrix), est = est)
+# llik(latent.srp2.init.r$mcmc.pmode, Y = t(Cmatrix), est = est)
+# with(latent.srp2.init.r.bfgs$mcmc.mle, llik(latent.srp2.init.r.bfgs$mkl, Y = t(Cmatrix), sender.var = sender.var, receiver.var = receiver.var,  Z.var = Z.var, est = est))
+#llik(latent.srp2.init.r.bfgs$mcmc.mle, Y = t(Cmatrix), est = est)
+#llik(latent.srp2.init.r.bfgs$mcmc.pmode, Y = t(Cmatrix), est = est)
+
+#same as sann
+#with(latent.srp2.init.r.bfgs, llik(t(Cmatrix), mkl$sender, mkl$receiver, mkl$beta, mkl$Z,  mcmc.mle$sender.var, mcmc.mle$receiver.var, mcmc.mle$Z.var,est = est))
+
+# best mcmc.mle estimate consistently a little workse than mkl
+  # with(latent.srp2$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z,sender.var, receiver.var, Z.var, est = est))
+  # with(latent.srp2.init.r.sann$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
+  # with(latent.srp2.init.r.bfgs$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
+ # even worse with #(latent.srp2, llik(Y, mkl$sender, mkl$receiver, mkl$beta, mkl$Z, sum(mkl$sender^2 + v_a*s2_a^2) / (N + 2 + v_a), sum(mkl$receiver^2 + v_b*s2_b^2) / (N + 2 + v_b), sum(as.vector(mkl$Z)^2 + v_z*s2_z^2) / (N*d + 2 + v_z), est = "MAP"))
+
+# Compare positions (with or without procrustes) ####
+#plot(latent.srp2.init.r$mkl$Z, col = col2, pch = 16)
+#plot(vegan::procrustes(latent.srp2.init.r$mkl$Z, latent.srp2.init.r$burnin.start$Z)$Yrot, col = col2, pch = 16)
+
+@
+
+Table \ref{results.table} compares the results for the two-dimensional Poisson latent space model by three different estimations techniques: 1) The limited-memory bounded quasi-Newton method implemented by the \code{optim} (QN L-BFGS-B). 2) MCMC estimation as implemented by \pkg{latentnet}; and 3) MCMC as in method two but with random initialization of sender and receiver coefficients and MDS initial positions scaled so that the maximum coordinate size is one. Note that this initialization is also employed for quasi-Netwon estimation. For MCMC chains we allowed a burn-in period of $500000$, and collected a sample of size $5000$ by storing every $500th$ draw. We checked for convergence and appropriate MCMC interval and burn-in values using the \code{mcmc.diagnostics} function of \pkg{latentnet}. The MCMC method of row two seems to converge based on diagnostic plots, but given given the higher-probably estimate resulting from a different initialization method, we see that it has in fact converged to a local maximum.
+
+Timing of computations was in R 3.3.2 with a MacBookPro, 2.6 GHz Intel Core i5 processor with 8 GB 1600 MHz DDR3 memory without. The ``code'' column indicates if the main operations were performed in \proglang{R} or \proglang{C}. Although not employed here, \pkg{latentnet} does allow for parallel processing of multiple MCMC chains. The time estimates should be considered ballpark for each method, as the number of iterations for the quasi-Netwon methods and control parameters for the MCMC could be augmented to achieve some speed-up. However, the process of optimizing these would mostly likely negate the time benefits.
+
+We present MKL estimates from MCMC methods because they have higher posterior and graph likelihood than other point estimates, such as the posterior mode. Results in previous sections have all drawn on the MKL estimates from the MCMC estimation with random initialization (row three). The MCMC methods are clearly much slower than the quasi-Newton methods due to the number of iterations required, although they have the advantage of returning a posterior sample. The much faster estimates from the quasi-Newton methods are very highly correlated with these results (column five).
+
+<<journal_simulation_study_data_optim, eval = T, echo = F, warning = F, message = F, cache = T, results = "hide">>=
+
+# 3. fits.o with optim (via latentnet tofit = mle) ####
+
+trials = 100; tol = .01; #tried adding precision but that didn't really change anything
+D = 2; N = nrow(Cmatrix)
+fits.o = list()
+Z_dist = dist2(t(Cmatrix))
+Z = cmdscale(Z_dist, k = D)
+Z = Z/max(abs(Z))
+
+t1.fits.o = Sys.time()
+for(i in 1:trials) {
+  s = simulate(model$model, par = model$mkl)
+  a = rnorm(N) 
+  b = rnorm(N) 
+  q  = ergmm(s ~ euclidean(d = 2) + rsender + rreceiver,
+                                response = "citations", family = "Poisson.log", seed = 30,
+                                tofit = c("mle"),
+                                user.start = list(Z = Z, sender = a, receiver = b, beta = 0,
+                                                  sender.var = var(a), receiver.var = var(b),
+                                                  Z.var = var(as.vector(Z))))
+  fits.o[[i]] = q
 }
+t2.fits.o = Sys.time()
+@
 
-tmp2 = lapply(sim2[[2]], function(x) {
-  exphi(as.sociomatrix(x, directed = T, attrname = "citations"))
-})
-qua2 = apply(matrix(unlist(tmp2), nrow = n, ncol = nsim), 1, quantile, c(.25, .95))
+<<journal_simulation_study_plots, eval = T, echo = F, cache = T, warning = F, fig.width = 6, fig.height = 5, fig.cap = 'Distribution of differences in ratings (receiver - sender) and total actor parameters (sender + receiver + intercept) based on 100 simulations' , dependson = c("journal_simulation_study_data")>>=
 
-tmp0 = lapply(sim0[[2]], function(x) {
-  exphi(as.sociomatrix(x, directed = T, attrname = "citations"))
-})
-qua0 = apply(matrix(unlist(tmp0), nrow = n, ncol = nsim), 1, quantile, c(.25, .95))
+# Plot distributions of differences in ratings and sum of actor effects + intercept
+library(ggplot2)
 
-tmp.qs = lapply(g[[2]], function(x) {
-  exphi(as.sociomatrix(x, directed = T, attrname = "citations"))
-})
-qua.qs = apply(matrix(unlist(tmp.qs), nrow = n, ncol = nsim), 1, quantile, c(.25, .95))
+# MAP ####
+# data ####
+data.o = data.frame(journal = rep(rownames(Cmatrix), length(fits.o)),
+                   sender_diff_raw = unlist(lapply(fits.o, function(x) {x$start$sender - model$mkl$sender})),
+                   receiver_diff_raw = unlist(lapply(fits.o, function(x) {x$start$receiver - model$mkl$receiver})),
+                   sender_diff = unlist(lapply(fits.o, function(x) {x$start$sender - mean(x$start$sender) - 
+                                                (model$mkl$sender - mean(model$mkl$sender))})),
+                   receiver_diff = unlist(lapply(fits.o, function(x) {x$start$receiver - mean(x$start$receiver) - 
+                                                (model$mkl$receiver - mean(model$mkl$receiver))})),
+                   beta_diff = rep(unlist(lapply(fits.o, function(x) {x$start$beta - model$mkl$beta})), each = 47)
+                   )
 
-par(mfrow = c(1,3))
-plot(exphi(t(Cmatrix)), type = "l", lwd = 3)
-points(qua.qs[1,], type = "l", col = "blue")
-points(qua.qs[2,], type = "l", col = "blue")
-plot(exphi(t(Cmatrix)), type = "l", lwd = 3)
-points(qua2[1,], type = "l", col = "red")
-points(qua2[2,], type = "l", col = "red")
-plot(exphi(t(Cmatrix)), type = "l", lwd = 3)
-points(qua0[1,], type = "l", col = "green")
-points(qua0[2,], type = "l", col = "green")
-#points(exphi(QSmat), col = "blue", type = "l")
+# 1. Receiver - sender to show ratings changes ####
+fits.o.rs = ggplot(data.o, aes(x = journal, y = receiver_diff - sender_diff, color = journal)) +
+  geom_boxplot() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        plot.title = element_text(size = 12)) +
+  geom_abline(slope = 0, intercept = 0, col = "gray") + 
+  ggtitle("Difference in rating") +
+  xlab(NULL) + ylab(NULL)
 
-# transitivity ####
-# exptrans measure the mean connectedness among the nodes that (i) is most connected to (determined by cutoff)
-# not a great comparison since qs fixes total citations on a dyad.
-exptrans <- function(Y, cutoff = 20) {
-  N = nrow(Y)
-  diag(Y) = rep(0, N)
-  tmp = 1:N
-  for(i in 1:N) {
-    # mean %age inter-connection between journals strongest connected to i
-     # i.e. the journals that send greatest % of their citation to i
-    j = sort(Y[,i]/rowSums(Y), decreasing = TRUE)[1:cutoff]
-    ind = which(Y[,i]/rowSums(Y)>=j[cutoff])
-    tmp[i] = mean((Y/rowSums(Y))[ind,ind])
+# 2. Sender + receiver + beta to show variation with positions ####
+fits.o.rsb = ggplot(data.o, aes(x = journal, y = sender_diff_raw + receiver_diff_raw + beta_diff, color = journal)) +
+  geom_boxplot() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+        plot.title = element_text(size = 12)) +
+  geom_abline(slope = 0, intercept = 0, col = "gray") +
+  ggtitle("Difference in total") +
+  xlab(NULL) + ylab(NULL)
+
+### MLE ####
+# data, mle ####
+data.o.mle = data.frame(journal = rep(rownames(Cmatrix), length(fits.o)),
+                  sender_diff_raw = unlist(lapply(fits.o, function(x) {x$start$sender - model$mle$sender})),
+                  receiver_diff_raw = unlist(lapply(fits.o, function(x) {x$start$receiver - model$mle$receiver})),
+                  sender_diff = unlist(lapply(fits.o, function(x) {x$mle$sender - mean(x$mle$sender) - 
+                                                (model$mkl$sender - mean(model$mkl$sender))})),
+                   receiver_diff = unlist(lapply(fits.o, function(x) {x$mle$receiver - mean(x$mle$receiver) - 
+                                                (model$mkl$receiver - mean(model$mkl$receiver))})),
+                   beta_diff = rep(unlist(lapply(fits.o, function(x) {x$mle$beta - model$mkl$beta})), each = 47)
+                   )
+
+# 1. Receiver - sender to show ratings changes ####
+fits.o.rs.mle = ggplot(data.o.mle, aes(x = journal, y = receiver_diff - sender_diff, color = journal)) +
+  geom_boxplot() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme_bw()+
+  geom_abline(slope = 0, intercept = 0, col = "gray") + 
+  ggtitle("Difference in rating") +
+  xlab(NULL) + ylab(NULL)
+
+# 2. Sender + receiver + beta to show variation with positions ####
+fits.o.rsb.mle = ggplot(data.o.mle, aes(x = journal, y = sender_diff + receiver_diff + beta_diff, color = journal)) +
+  geom_boxplot() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_abline(slope = 0, intercept = 0, col = "gray") +
+  ggtitle("Difference in total") +
+  xlab(NULL) + ylab(NULL) + 
+  ylim(-2,3)
+
+# PLOTS ####
+cowplot::plot_grid(fits.o.rs, fits.o.rsb, nrow = 2)
+@
+
+<< poisson_glm_offset, eval = T, echo = F, warning = F, message = F, fig.keep = "none", cache = T>>=
+
+# To estimate uncertainty in latent position model based on quasi-Newton estimate 
+
+# build design matrix:
+n = 47
+x1c = matrix(0, n^2, 2*n)
+for (i in 1:n) {
+  for (j in 1:n) { 
+    if (i != j) {
+      x1c[n*(i-1)+j,i]=1;
+      x1c[n*(i-1)+j,j+n]=1;
+    }
   }
-  if (!is.null(row.names(Y))) names(tmp) = row.names(Y)
-  return(tmp)
 }
 
-plot(sort(exptrans(t(Cmatrix), cutoff)), ylim = c(0,.06), type = "l")
-points(sort(exptrans(predict(latent.srp0), cutoff)), col = "red", type = "l")
-points(sort(exptrans(predict(latent.srp2), cutoff)), col = "green", type = "l")
-points(sort(exptrans(predict(latent.srp2.h, type = "start"), cutoff)), col = "magenta", type = "l")
-points(sort(exptrans(QSmat, cutoff)), col = "blue", type = "l")
+x1c[,35] = 0 #choose the low data journal as the constrained one
+x1c[,35+47] = 0 #choose the low data journal as the constrained one
+
+# response
+y2 = as.vector(t(Cmatrix))
+
+# offset
+Z_dist = dist2(model$mkl$Z)
+
+#model to compare to 
+model = latent.srp2.init.r
+
+# glm:
+g2c = glm(y2 ~ x1c + offset(-as.vector(Z_dist)), family = poisson(link="log"))
+
+# compare rating (basically identical):
+plot(g2c$coefficients[2:48] - g2c$coefficients[49:95], model$mkl$receiver - model$mkl$sender)
+cor(g2c$coefficients[2:48] - g2c$coefficients[49:95], model$mkl$receiver - model$mkl$sender, use = "complete.obs")
+
+# compare sd
+v_g2c = vcov(g2c) #vcov(g1) = summary(g1)$cov.scaled = summary(g1)$cov.unscaled*phi 
+sd2 = apply(model$sample$receiver - model$sample$sender, 2, sd)[-35]
+sd2g = sqrt(sapply(2:47, function(x) {v_g2c[x,x] + v_g2c[x+46,x+46] + 2*v_g2c[x,x+46]}))
+plot(sd2, sd2g)
+range(sd2)
+range(sd2g)
+range(sd2 - sd2g)
 @
 
-\subsubsection{Sensitivity} \label{sensitivity}
+To more formally examine the accuracy of quasi-Newton estimation we conduct a simulation study. We generate 100 simulated citation networks from the MKL point estimate and fit each by QN L-BFGS-B. We then compare the differences in ratings (sender minus receiver coefficient) and total actor parameters (sender plus receiver coefficient plus intercept) between the data generating model and the simulation estimate. Although the zero-mean prior reduces the non-identificability of the random effects, in practice with diffuse priors there is slight fluctuation. To account for this when calculating differences in ratings, we center the sender and receiver estimates to mean zero. The results are presented in Figure \ref{journal_simulation_study_plots}. The top panel shows that the differences in ratings are all concentrated near zero, indicating that QN L-BFGS-B does reliably recreate the ``true'' ratings in this case. Slighlty larger variances occur for journals such StataJ which have fewer non-zero edges. The bottom panel shows the differences in total actor parameters. Deviations from zero in this panel indicate changes in positions relative to the data-generating model. Journals estimated to be closer on aggregate to other journals compensate with smaller random effects. Three journals are estimated to be significantly closer to the rest of the network. We observe in the network visualization they each is in the periphery of the network. Thus, there is a linear range for which their position is nearly identified with the total of their sender and reciever coefficients. This is not a problem with the estimation method but stems from underlying uncertainty model. However, it does not affect our estimated rankings, as we see in the top panel, not the overall interpretation of the network. That said, it we must remember that the positions of peripheral nodes are more variable than central ones. 
+
+Although the QN L-BFGS-B do not return a sample of the posterior distribution of $\theta$ like MCMC estimation, we can still estimate the variance in ratings. One method for doing this is to fit a Poisson GLM to the data matrix with estimated positions as an offset, i.e the distance term in \ref{eq3} is treated as a constant. We implemented such a model in this case and found similar estimates of ratings uncertainty to those derived from the MCMC sample. The estimated standard deviations range from 0.22 to 0.29, with differences from the MCMC estimates ranging from about 0 to 0.013. 
 
 <<hyperpriors, eval = T, cache = T, echo = F, results = 'hide', warning= F, message = F, fig.keep='none', dependson= c("llik_and_latent_qn")>>=
 
@@ -2481,14 +2501,6 @@ for (i in 1:length(samp1)) {
 Z_dist = dist2(object$map$Z)
 summary(median1)
 summary(mean1)
-
-set.seed(1) #best of a few attempts
-latent_qn2.h = lsqn(Y = t(Cmatrix), N = 47, D = 2, runs = 50, tol = .01, Z.init = "rnorm",
-     v_a = sender.var.df, v_b = receiver.var.df, v_z = Z.var.df,
-     s2_a = prior.sender.var, s2_b = prior.receiver.var, s2_z = prior.Z.var,
-     sigma2_B = beta.var ) 
-
-range(latent_qn2.h$map$diff_Z); range(latent_qn2.h$map$diff_Z2)
 @
 
 << latent_hyperpriors, eval = T, cache = T, echo = F, results = 'hide', warning= F, message = F, fig.keep='none', dependson= c("llik_and_latent_qn")>>=
@@ -2534,201 +2546,83 @@ cor(sd.h^2, sd2^2)
 
 @
 
+<<journal_simulation_study_data_optim_h, eval = T, echo = F, warning = F, message = F, cache = T, results = "hide">>=
+
+
+trials = 100; tol = .01; #tried adding precision but that didn't really change anything
+D = 2; N = nrow(Cmatrix)
+fits.oh = list()
+Z_dist = dist2(t(Cmatrix))
+Z = cmdscale(Z_dist, k = D)
+Z = Z/max(abs(Z))
+N = 47; d = 2
+
+sender.var.df = 2*3 #default 3 ** shrink sender range.  higher df condenses
+receiver.var.df  = 2*3 #default 3 ** shrink receiver range
+Z.var.df = 2*sqrt(N)  #default sqrt(N) ** shrink z range
+
+prior.sender.var = .5 #default 1. higher var moves mode from 0
+prior.receiver.var = .5
+prior.Z.var = N/32 #default N/8 ** shrink sigma_z range
+beta.var = 1 #default 9
+
+t1.fits.oh = Sys.time()
+for(i in 1:trials) {
+  s = simulate(model$model, par = model$mkl)
+  a = rnorm(N) 
+  b = rnorm(N) 
+  q  = ergmm(s ~ euclidean(d = 2) + rsender + rreceiver,
+                                response = "citations", family = "Poisson.log", seed = 30,
+                                tofit = c("mle"),
+                                prior = ergmm.prior(sender.var.df = sender.var.df,
+                                        receiver.var.df = receiver.var.df,
+                                        Z.var.df = Z.var.df,
+                                        beta.var = beta.var),
+                                user.start = list(Z = Z, sender = a, receiver = b, beta = 0,
+                                                  sender.var = var(a), receiver.var = var(b),
+                                                  Z.var = var(as.vector(Z))))
+  fits.oh[[i]] = q
+}
+t2.fits.oh = Sys.time()
+
+@
+
+<<journal_simulation_study_plots_h, eval = F, echo = F, warning = F, dependson = c("journal_simulation_study_data", "journal_simulation_study_data_h", cache = T)>>=
+
+# Not a big difference with these hyperprior adjustments. MAP estimates have slight shrinkage, maybe .1 total,
+# 
+# MAP - adjusted hyperpriors ####
+# data ####
+data.oh = data.frame(journal = rep(rownames(Cmatrix), length(fits.oh)),
+                   sender = unlist(lapply(fits.oh, function(x) {x$start$sender - mean(x$start$sender)})),
+                   receiver = unlist(lapply(fits.oh, function(x) {x$start$receiver - mean(x$start$receiver)})),
+                   sender_diff = unlist(lapply(fits.oh, function(x) {x$start$sender - mean(x$start$sender) - 
+                                                (model$mkl$sender - mean(model$mkl$sender))})),
+                   receiver_diff = unlist(lapply(fits.oh, function(x) {x$start$receiver - mean(x$start$receiver) - 
+                                                (model$mkl$receiver - mean(model$mkl$receiver))})),
+                   beta_diff = rep(unlist(lapply(fits.oh, function(x) {x$start$beta - model$mkl$beta})), each = 47)
+                   )
+
+# 1. Receiver - sender to show ratings changes ####
+fits.oh.rs = ggplot(data.oh, aes(x = journal, y = receiver_diff - sender_diff, color = journal)) +
+  geom_boxplot() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_abline(slope = 0, intercept = 0, col = "gray") + 
+  ggtitle("Difference in rating") +
+  xlab(NULL) + ylab(NULL)
+
+# 2. Sender + receiver + beta to show variation with positions ####
+fits.oh.rsb = ggplot(data.oh, aes(x = journal, y = sender_diff + receiver_diff + beta_diff, color = journal)) +
+  geom_boxplot() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_abline(slope = 0, intercept = 0, col = "gray") +
+  ggtitle("Difference in total") +
+  xlab(NULL) + ylab(NULL)
+
+@
+
 As with any Bayesian model we must consider the sensitivity of estimates to the assumptions contained in the prior structure and hyperprior values. However, we find such a strong correlation (0.999) between the rating scores resulting from the MLE and MKL estimates that there is little reason to suspect undue influence from the priors. Still, we consider shrinking the prior intercept variance to one, and adjustments to the hyperprior degrees of freedom and variance. These adjustments narrow the prior distributions on variance parameters to more realistic ranges based on previous results. The middle 90 percent intervals drop to roughly $[0.2, 1.8]$ instead of $[0.4, 8.5]$ for sender and receiver variances, and $[0.9, 3.2]$ instead of $[2.9, 20]$ for position variance. The impact on the results is trivial. The updated estimates of scores and their variances barely change from the previous estimates (correlation $> 0.99$).
 
-\subsubsection{Comparison of Estimation Methods} \label{estimeval}
-
-<<compare_latent_models, eval = T, echo = F, cache=T, results='asis', cache.comments = FALSE, warning= FALSE, dependson = c("latent_sr2_init_r", "latent_sr2", "latent_qn")>>=
-
-results.table = data.frame(row.names = c("Quasi-Newton", "optim (L-BFGS-B)", "MCMC (MKL)", "MCMC.init.r (MKL)" ))
-
-results.table$"Time (min)" = c("$<1$", "$<1$", round(t2.srp2 - t1.srp2), round(t2.init.r - t1.init.r))
-
-results.table$"$l(Y|\\hat{\\theta})$" = as.character(round(
-                                c(llik(latent_qn$map, Y = t(Cmatrix), est = "Y"), 
-                                llik(latent.srp2.init.r$burnin.start, Y = t(Cmatrix), est = "Y"),
-                                #latentnet finds a conditional posterior mode using optim before burnin
-                                llik(latent.srp2$mkl, Y = t(Cmatrix), est = "Y"),
-                                llik(latent.srp2.init.r$mkl, Y = t(Cmatrix), est = "Y"))))
-results.table$"$l(\\hat{\\theta})$" = as.character(round(
-                                c(llik(latent_qn$map, Y = t(Cmatrix), est = "theta"),
-                                llik(latent.srp2.init.r$burnin.start, Y = t(Cmatrix), est = "theta"),
-                                with(latent.srp2$mcmc.mle, llik(latent.srp2$mkl,
-                                     Y = t(Cmatrix), sender.var = sender.var,
-                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
-                                with(latent.srp2.init.r$mcmc.mle, llik(latent.srp2.init.r$mkl,
-                                     Y = t(Cmatrix), sender.var = sender.var,
-                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")))))
-results.table$"$l(\\hat{\\theta}|Y)$" = as.character(as.numeric(results.table$"$l(Y|\\hat{\\theta})$") + as.numeric(results.table$"$l(\\hat{\\theta})$"))
-
-results.table$sample = c("No", "No", "Yes", "Yes")
-results.table$code = c("R", "C", "C", "C")
-latent2 = latent.srp2.init.r$mkl$receiver - latent.srp2.init.r$mkl$sender
-results.table$"Rating Cor." = c(cor(latent2, latent_qn$map$receiver - latent_qn$map$sender),
-                               cor(latent2, latent.srp2.init.r$burnin.start$receiver - 
-                                            latent.srp2.init.r$burnin.start$sender),
-                               cor(latent2, latent.srp2$mkl$receiver - latent.srp2$mkl$sender),
-                               cor(latent2, latent.srp2.init.r$mkl$receiver - 
-                                            latent.srp2.init.r$mkl$sender))
-
-print(xtable(results.table, caption = "Estimation Methods", digits = 4, label = "results.table"), caption.placement = "top", sanitize.text.function=function(x){x})
-
-# MCMC diagnostics ####
-
-  # these all look fine
-  # mcmc.diagnostics(latent.srp2)
-  # mcmc.diagnostics(latent.srp2.init.r)
-  # mcmc.diagnostics(latent.srp2.init.r.sann)
-
-# Other estimates ####
-# est = "Y"
-# llik(latent.srp2.init.r$mcmc.mle, Y = t(Cmatrix), est = est)
-# llik(latent.srp2.init.r$mcmc.pmode, Y = t(Cmatrix), est = est)
-# with(latent.srp2.init.r.bfgs$mcmc.mle, llik(latent.srp2.init.r.bfgs$mkl, Y = t(Cmatrix), sender.var = sender.var, receiver.var = receiver.var,  Z.var = Z.var, est = est))
-#llik(latent.srp2.init.r.bfgs$mcmc.mle, Y = t(Cmatrix), est = est)
-#llik(latent.srp2.init.r.bfgs$mcmc.pmode, Y = t(Cmatrix), est = est)
-
-#same as sann
-#with(latent.srp2.init.r.bfgs, llik(t(Cmatrix), mkl$sender, mkl$receiver, mkl$beta, mkl$Z,  mcmc.mle$sender.var, mcmc.mle$receiver.var, mcmc.mle$Z.var,est = est))
-
-# best mcmc.mle estimate consistently a little workse than mkl
-  # with(latent.srp2$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z,sender.var, receiver.var, Z.var, est = est))
-  # with(latent.srp2.init.r.sann$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
-  # with(latent.srp2.init.r.bfgs$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
- # even worse with #(latent.srp2, llik(Y, mkl$sender, mkl$receiver, mkl$beta, mkl$Z, sum(mkl$sender^2 + v_a*s2_a^2) / (N + 2 + v_a), sum(mkl$receiver^2 + v_b*s2_b^2) / (N + 2 + v_b), sum(as.vector(mkl$Z)^2 + v_z*s2_z^2) / (N*d + 2 + v_z), est = "MAP"))
-
-# Compare positions (with or without procrustes) ####
-#plot(latent.srp2.init.r$mkl$Z, col = col2, pch = 16)
-#plot(vegan::procrustes(latent.srp2.init.r$mkl$Z, latent.srp2.init.r$burnin.start$Z)$Yrot, col = col2, pch = 16)
-
-@
-
-Table \ref{results.table} compares the results for the two-dimensional Poisson latent space model with four different estimations techniques: 1) The quasi-Netwon method outlined in section \ref{QN}; 2) The limited-memory bounded quasi-Newton method implemented by the \code{optim} function in the \proglang{R} base package \pkg{stats}. This is the intermediate optimization method of \pkg{latentnet}; 3) MCMC estimation as implemented by \pkg{latentnet}; and 4) MCMC as in method three but with random initialization as used in quasi-Newton method one. For MCMC methods we check for convergence and appropriate MCMC interval and burn-in values using the \code{mcmc.diagnostics} function of \pkg{latentnet}. (The MCMC method of row three seems to converge based on diagnostic plots, but could potentially achieve the estimate of method four with a much longer burn-in.) For our quasi-Netwon method we check that all calculated first derivatives are approximately zero and all second derivatives are negative. The log likelihoods shown in columns two through four are up to a constant value.
-
-We present MKL estimates from MCMC methods because they have higher posterior and graph likelihood than other point estimates, such as the posterior mode. Results in previous sections have all drawn on the MKL estimates from the MCMC estimation with random initialization (row four). The MCMC methods are much slower than the quasi-Newton methods, although they have the advantage of returning a posterior sample. The much faster estimates from the quasi-Newton methods are very highly correlated with these results (column four). For larger networks where we are primarily interested in a point estimate, the quasi-Netwon methods are probably preferable.
-
-Timing of computations was in R 3.3.2 with a MacBookPro, 2.6 GHz Intel Core i5 processor with 8 GB 1600 MHz DDR3 memory without. The ``code'' column indicates if the main operations were performed in \proglang{R} or \proglang{C}. Although not employed here, \pkg{latentnet} does allow for parallel processing of multiple MCMC chains. The estimates should be considered ballpark for each method, as the number of iterations for the quasi-Netwon methods and control parameters for the MCMC could be augmented to achieve some speed-up. However, the process of optimizing these would mostly likely negate the time benefits. 
-
-<<journal_simulation_study, eval = F, echo = F>>=
-
-#tried adding precision but that didn't help.
-#tried using qn estimates to start and that didn't help
-
-trials = 50; tol = .01 
-tmp = list()
-for(i in 19:22) {
-  s = predict.lsqn(latent_qn, type = "rpois"); diag(s) = 0
-  q  = lsqn(s, runs = 50, tol = tol)$map
-  tmp[[i]] = q
-  print(i)
-}
-
-data0= data.frame(journal = rep(rownames(Cmatrix), 50),
-                   sender = unlist(lapply(tmp, function(x) {x$sender - latent_qn$map$sender})),
-                   receiver = unlist(lapply(tmp, function(x) {x$receiver - latent_qn$map$receiver})),
-                   beta = rep(unlist(lapply(tmp, function(x) {x$beta - latent_qn$map$beta})), each = 47))
-
-ggplot(data0, aes(x = journal, y = sender + receiver + beta, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-
-#variance w/ sender - receiver
-ggplot(data0, aes(x = journal, y = receiver - sender + beta, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-   
-
-trials = 300; tol = .001 #tried adding precision but that didn't help.
-#fits = list()
-#for(i in 1:trials) {
-#  s = simulate(latent.srp2.init.r$model, par = latent.srp2.init.r$mkl)
-#  m = as.sociomatrix(s, ignore.eval = F, attrname = "citations")
-#  q  = lsqn(m, runs = 50, tol = tol)$map
-#  fits[[i]] = q
-#  print(i)
-#}
-
-# check for diffz outsize tol - bad if you don't cut those out
-# fails = unlist(lapply(fits, function(x) {max(abs(x$diff_Z)) > tol}))
-# fits2 = fits[!fails]
-
-#load saved version
-fits2 = readRDS("fits2.rds")
-
-
-
-# compare. 
-# shifts in sender or receiver don't matter. 
-model = latent.srp2.init.r$mkl
-
-#variance w/ sender + receiver + beta
-data1 = data.frame(journal = rep(rownames(Cmatrix), sum(!fails)),
-                   sender = unlist(lapply(fits2, function(x) {x$sender - model$sender})),
-                   receiver = unlist(lapply(fits2, function(x) {x$receiver - model$receiver})),
-                   beta = rep(unlist(lapply(fits2, function(x) {x$beta - model$beta})), each = 47))
-
-ggplot(data1, aes(x = journal, y = sender + receiver + beta, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-
-#variance w/ sender - receiver
-ggplot(data1, aes(x = journal, y = receiver - sender + beta, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-   
-# positions
-Zp = lapply(fits2, function(x) {vegan::procrustes(model$Z, x$Z)$Yrot })
-plot(model$Z, type = "n")
-text(model$Z, col = "red")
-for (i in 1:length(fits2)) {
-  text(vegan::procrustes(model$Z, fits[[i]]$Z)$Yrot, as.character(1:47), cex = .5)
-}
-
-trials = 30
-fits.h = list()
-for(i in 1:trials) {
-  s = simulate(latent.srp2.init.r$model, par = latent.srp2.init.r$mkl)
-  m = as.sociomatrix(s, ignore.eval = F, attrname = "citations")
-  q  = lsqn(m, runs = 50, tol = .01, v_a = 1, v_b = 1, v_z = 1,
-              s2_a = 10, s2_b = 10, s2_z = nrow(m), sigma2_B = 9)$map
-  fits.h[[i]] = q
-  print(i)
-}
-
-fails = unlist(lapply(fits.h, is.null))
-fits.h = fits.h[!fails] #removes 10
-fails = unlist(lapply(fits.h, function(x) {max(abs(x$diff_Z)) > tol}))
-fits.h = fits.h[!fails] #removes 155
-data2 = data.frame(journal = rep(rownames(Cmatrix), length(fits.h)),
-                   sender = unlist(lapply(fits.h, function(x) {x$sender - model$sender})),
-                   receiver = unlist(lapply(fits.h, function(x) {x$receiver - model$receiver})),
-                   beta = rep(unlist(lapply(fits.h, function(x) {x$beta - model$beta})), each = 47))
-
-gsender = ggplot(data2, aes(x = journal, y = sender, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-
-greceiver = ggplot(data2, aes(x = journal, y = receiver, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-
-grate = ggplot(data2, aes(x = journal, y = receiver - sender + beta, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-
-cowplot::plot_grid(gsender, greceiver, grate, nrow = 3)
-#variance w/ sender - receiver
-ggplot(data2, aes(x = journal, y = receiver - sender + beta, color = journal)) +
-  geom_boxplot() +
-  theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1))
-
-# positions
-plot(model$Z, type = "n")
-text(model$Z, col = "red")
-for (i in 1:trials) {
-  text(vegan::procrustes(model$Z, fits.h[[i]]$Z)$Yrot, as.character(1:47), cex = .5)
-}
-@
 
 %If data for related fields such as economics and applied math becomes available (which it is not yet), we could employ such a covariate strategy between fields, or the clustering model of \citet{handcock07} if the network structure allows.  % In the next application we fit a latent space model to movie data that spans genres and different levels of connectivity.
 %%The average computational journal as categorized by \citet{varinetal} has 419 out-citation in the network while the average ecological journal has only 115. A covariate could be added to the model to augment the expected counts within or between subfields.
@@ -2997,7 +2891,7 @@ movie.table$"Rating Cor." = c(cor(acw2, acw.qn.h$map$receiver - acw.qn.h$map$sen
                                             latent_acw2.h$mkl$sender)
                              )
 
-print(xtable(movie.table, caption = "Estimation Methods", digits = 4, label = "movie.table"),
+print(xtable(movie.table, caption = "Estimation methods. The $ell$ function in the column titles indicates the log of the probability.", digits = 4, label = "movie.table"),
       sanitize.text.function=function(x){x})
 @
 
@@ -3224,7 +3118,7 @@ There is a strong correlation of $0.95$ (or $0.976$ when weighted by the log of 
 Figure \ref{fig:r movie_compare} shows this correlation, plotting the latent space scores against the average ratings and labeling points by review counts for each film. Although not pictured, the standard deviations in the ratings are fairly consistent. They range from 0.13 to 0.26 (95th percentile) with a median of 0.14. The high-end outliers have very few co-review counts, and only points with few co-reviews deviate strongly from the overall linear trend. We take a closer look at a couple of the films that deviate from the trend but have more than $20$ reviews, highlighted in green. The corresponding films are, from left to right, \textit{Shaft in Africa (1973)} and \textit{Assassination (1987)}. These films have a potential ``cult'' following based on their lead actors, Richard Roundtree (as Shaft) and Charles Bronson respectively. That may boost some of the user reviews, but when comparative reviews are considered in the latent space model the derived rating is lower.
 %also #79 with 32 reviews, Wanted: Dead or Alice (1987). Based on a three-season television show that launched steve mcqueen's career. 
 
-<<r movie_compare, eval = T, echo = F, dependson = c("movie_data", "setup"), cache = T, message = FALSE, warning = FALSE, fig.height = 6, results = "hide", fig.cap= "Latent space model scores vs. average ratings. The plotting characters are the review counts for each film. The red points are strong outliers to the linear trend, have very few reviews, and are excluded in calculating the best fit line. The green points are discussed in the paper." >>=
+<<r movie_compare, eval = T, echo = F, dependson = c("movie_data", "setup"), cache = T, message = FALSE, warning = FALSE, fig.width = 6, results = "hide", fig.cap= "Latent space model scores vs. average ratings. The plotting characters are the review counts for each film. The red points are strong outliers to the linear trend, have very few reviews, and are excluded in calculating the best fit line. The green points are discussed in the paper." >>=
 
 library(ggplot2)
 
@@ -3258,7 +3152,7 @@ boot:::corr(cbind(stars1, vc.acw),
 
 @
 
-<<r movie_uncertainty, eval = T, cache = T, echo = F, results = "hide">>=
+<<r movie_uncertainty, eval = F, cache = T, echo = F, results = "hide">>=
 movie_sd = apply(latent_acw2.h$sample$receiver - latent_acw2.h$sample$sender, 2, sd)
 quantile(movie_sd, probs = c(0,.25,.5,.75,.90, .95, .97, 1))
 (movie_net_acw_full%v%"counts")[which(movie_sd > .28)]
@@ -3326,11 +3220,31 @@ visNetwork(nodes, edges, main = "Movie Network", submain = "latent space positio
 
 @
 
+<<r movie_cloud, eval = F, echo = F, fig.height = 6, cache = T, fig.cap = "Uncertainty in estimated film positions illustrated by a sample of positions from the model posterior distribution. Colouring is due to pre-assigned genre labels.">>=
+####  cloud/uncertainty plot  ####
+n = nrow(acw_mat)
+N = 1000
+p = latent_acw2.h[["sample"]][["Z"]]
+s = sample(5000, N)
+
+#null plot:
+plot(latent_acw2.h$mkl$Z, xlab = NA, ylab = NA, type ="n",
+           bty="n", yaxt="n", xaxt="n",  main = NA,
+           xlim = c(-4,5), ylim = c(-4,4))
+
+legend("topright", pch = 16, col = rainbow(5, alpha = 1)[c(4,3,5,2,1)], legend = levels(as.factor(movie_net_acw_full%v%"genres")), bty = "n", legend.ce)
+
+#add points
+for (i in 1:N) {
+  points(p[s[i],,], col = (rainbow(5, alpha = 1)[c(4,3,5,2,1)])[as.numeric(as.factor(movie_net_acw_full%v%"genres"))], pch = 15, cex = .2)
+}
+@
+
 The movies clearly cluster by genre even though genre was not a term in the model. Even those movies with hybrid genres are placed roughly between their two component genres. However, there are a few films that reside outside of their genre cluster. In those cases the plot can highlight incomplete or incorrect classification. For example, the film \textit{Coogan's Bluff (1968)} is categorized as a crime film by MovieLens, but its latent position is among actions and westerns. The Internet Movie Database (\textit{IMDb}) entry for this film describes it as ``An Arizona deputy goes to New York City to escort a fugitive back into custody,'' and the lead role is played by action/crime/western star Clint Eastwood \citep{coogan}. This film has heavy action and western influences which its latent position reveals. Another example of misclassification is the two ``action'' films \textit{The Kid (1921)} and \textit{Minnie and Moskowitz (1971)}, positioned between crimes and westerns. Their genres listed on \citet{imdb} are comedy/drama/family, and comedy/drama/romance, respectively. Neither is well-classified as an action film, and their positions reflect this, though without comic films in the data the correct positions are lost.
 
 The continuous positions from the latent space model are more precise identifiers of movie type than discrete cluster labels. Like the journal citation network visualized in Section \ref{Example1}, the clusters are discernible but irregularly shaped and blend into each other. The positions aid in identifying sub-genres, which may be valuable for recommendation systems. For example, the westerns that tail into the crime cluster, \textit{Unforgiven (1992)}, \textit{Tombstone(1993)}, and \textit{Dead Man (1995)} reveal a "modern western" subgenre. These films are much newer than the median year of westerns in the data (1968).
 
-If no genre labels are given the fit positions provide rich input for a clustering algorithm. To illustrate, we apply k-means clustering with three clusters which we expect to correspond roughly to the action, crime and western films (\citealt{kmeans}, \citealt{r}). We use pair-counting to measure accuracy, with the caveat that not all pre-assigned genres are correct, as discussed above. Films originally labeled with two genres are considered a match if assigned to either of those genres. Table \ref{class.table} compares the k-means output to pre-assigned genre labels. Of the 128 films in the network, 105 are assigned to matching labels. The most common change in classification is from action to crime. The comparison is visualized in Figure \ref{fig:movie_kmeans}. Most films that switch labels are positioned near the boundary of the three classes, indicating that a single label is probably insufficient.
+If no genre labels are given the fit positions provide rich input for a clustering algorithm. To illustrate, we apply k-means clustering with three clusters which we expect to correspond roughly to the action, crime and western films (\citealt{kmeans}, \citealt{r}). We use pair-counting to measure accuracy, with the caveat that not all pre-assigned genres are correct, as discussed above. Films originally labeled with two genres are considered a match if assigned to either of those genres. Table \ref{class.table} compares the k-means output to pre-assigned genre labels. Of the 128 films in the network, 105 are assigned to matching labels. The most common change in classification is from action to crime. The comparison is visualized in Figure \ref{fig:movie_kmeans}. Most films that switch labels are positioned near the boundary of the three classes, indicating that a single label is probably insufficient. To put these results in perspective, we implemented two popular community detections methods to the film matrix, a Louvain modularity maximization method and informap, as implemented in \pkg{igraph}. Both are unsupervised and require undirected networks, so we input the symmetric matrix of dyad totals. The Louvain method returned three communities, one that corresponded to westerns, one to action and crime films, and a smaller one to crime films in the center of the plot. There were 38 total misclassifications. Infomap returned only one community, highlighting the lack of distinct divisions between genres that positions are able to capture. 
 
 <<movie_kmeans, cache = T, echo = F, fig.height = 3, fig.width = 7, results = "asis", fig.cap = "Film network colored by k-means class with shape determined by pre-assigned genre. Centers of the k-means classes are labeled 1-3.", dependson = c("movie_model_r"), message = F>>=
 
@@ -3382,6 +3296,37 @@ west_years = sort(sapply((movie_net_acw_full%v%"titles")[movie_net_acw_full%v%"g
 crime_years = sort(sapply((movie_net_acw_full%v%"titles")[movie_net_acw_full%v%"genres"=="Crime"], str_extract, "[0-9]{4}"))
 action_years = sort(sapply((movie_net_acw_full%v%"titles")[movie_net_acw_full%v%"genres"=="Action"], str_extract, "[0-9]{4}+"))
 #median(as.numeric(west_years)); median(as.numeric(crime_years)); median(as.numeric(action_years)); 
+
+@
+
+% vs. an out-of-the-box clustering method on the (directed) graph, which does worse:
+<<movie_louvain, eval = F, echo = F, results = "hide">>=
+
+# vs. an out-of-the-box clustering method on the (directed) graph
+
+# louvain ("multi-level modularity optimization") ####
+tmp = igraph::graph.adjacency(acw_mat+t(acw_mat), weighted=T, mode = "undirected")
+tmp.cl = igraph::cluster_louvain(tmp) #undirected only
+plot(latent_acw2.h$mkl$Z, col = tmp.cl$membership, pch = as.numeric(as.factor(movie_net_acw_full%v%"genres")))
+legend("topright", cex = .7, pch = 1:5, legend = levels(as.factor(movie_net_acw_full%v%"genres")))
+
+# this method groups most action and crime films as one group, recognizes the westerns, and has a third group of mostly action and action|crime that's between those two.
+
+tmp.table = table(tmp.cl$membership, as.factor(movie_net_acw_full%v%"genres"))
+#group (1) is western -> 3 western misclassified (column), 6 others (row) misclassified
+#group (2) is action, -> 37 + 1 misclassified
+#group (3) is Crime -> no additional
+#if group 3 action instead, 20 + 19 + 1 +1 misclassified,  (worse)
+
+# infomap ####
+tmp = igraph::graph.adjacency(acw_mat+t(acw_mat), weighted=T, mode = "undirected")
+tmp.cl = igraph::cluster_infomap(tmp) #undirected only
+plot(latent_acw2.h$mkl$Z, col = tmp.cl$membership, pch = as.numeric(as.factor(movie_net_acw_full%v%"genres")))
+legend("topright", cex = .7, pch = 1:5, legend = levels(as.factor(movie_net_acw_full%v%"genres")))
+
+tmp.table = table(tmp.cl$membership, as.factor(movie_net_acw_full%v%"genres"))
+
+#Note, methods such as cluster_edge_betweenness and cluster_infomap return one community (forcing three communities from cluster_edge_betweenness gives two with size 1) and clutser_leading_eigin and cluster_fast greedy return two
 
 @
 
@@ -3449,17 +3394,6 @@ While the latent space rankings are very similar to those of the quasi-Stigler m
 
 Furthermore, the visualizations allow for nuanced genre detection. Though our models do not include a term to capture genre, the latent space positions have proven to cluster in agreement with pre-assigned genres. In the case where labels are not provided, we showed that k-means clustering on the estimated positions can produce good results. In preliminary comparisons this technique has performed better than clustering algorithms on the raw data, but further work is needed to establish these results.
 
-% vs. an out-of-the-box clustering method on the (directed) graph, which does worse:
-<<movie_louvain, eval = F, echo = F, results = "hide">>=
-
-# vs. an out-of-the-box clustering method on the (directed) graph
-tmp = igraph::cluster_louvain(igraph::graph.adjacency(acw_mat+t(acw_mat), weighted=T, mode = "undirected"), weights = NULL) #undirected only
-plot(latent_acw2.h$mkl$Z, col = tmp$membership, pch = as.numeric(as.factor(movie_net_acw_full%v%"genres")))
-legend("topright", cex = .7, pch = 1:5, legend = levels(as.factor(movie_net_acw_full%v%"genres")))
-# this method groups most action and crime films as one group, recognizes the westerns, and has a third group of mostly action and action|crime that's between those two.
-
-@
-
 The speed of the quasi-Newton algorithm enables us to fit larger networks than were practical with MCMC estimation. We were able to fit an expanded film network of 510 nodes in roughly 20 minutes, whereas it would take over 24 hours with MCMC estimation. (the quasi-Newton optimization implemented by \pkg{latentnet} takes roughly double as long as our quasi-Newton method in this case.)
 Porting the body of our code to \proglang{C++} using \pkg{Rcpp} would further increase the speed. However, we still face the scaling problem of the number of edges growing $O(n^2)$. One way to address this is to parallelize the updates to positions, which is straightforward since the algorithm updates positions synchronously. An area of future work is to develop a model with a local dependence structure. For many large networks we expect that the positions and random effects for each node depend primarily on a neighborhood around the node and a few high-activity nodes with wide reach. This would reduce the storage space and number number of calculations needed for each update step, assuming we can develop a simple method for identifying the nodal neighborhoods. The number of edges to consider would grow only $O(n)$ in the case that mean degree were not an increasing function of graph size, which is a realistic assumption of many social networks.
 
@@ -3478,258 +3412,6 @@ plot(gof(v.fit,GOF=~degree))
 Z = v.fit$V_z[!isolates_acw_thin,]
 
 @
-
-\begin{appendix}
-
-\section{Appendix: Additional Plots}\label{Appendix1}
-
-<<r latent2_centipede, eval = T, echo = F, cache = T, warning = F, message = F, results = 'hide', dependson= c("setup", "latent_sr2", "setup_jrss", "latent2_stigler"), fig.height = 6, fig.pos = "H", fig.cap = "Visualizing uncertainty in latent space scores (left) and quasi-Stigler scores (right). The error bars are +/- 1.96 estimates of standard deviation (left) and quasi-standard error (right). Comparison of ``comparison intervals'' around estimated values, which are equal to 1.96$*$QSE in each direction, and 1.96$*$SE in each direction. Note that due to fit constraints, AMS only has an estimated QSE.">>=
-
-# from plotrix package, but made some changes ####
-# added cex arg and commented out something with segs[4, and x axis label
-
-centipede.plot <- function (segs, mct = "mean", lower.limit = "std.error", upper.limit = lower.limit, 
-    left.labels = NULL, right.labels = NULL, sort.segs = TRUE, 
-    main = "", xlab = NA, pch = 21, vgrid = NA, hgrid = NA, gridcol = "lightgray", 
-    mar = NA, col = par("fg"), bg = "green", cex = NULL, ...) 
-{
-    if (missing(segs)) {
-        cat("Usage: centipede.plot(segs,...)\n\twhere segs is a dstat object")
-        stop("or a matrix of midpoints and limits")
-    }
-    if (is.list(segs)) {
-        if (all(lapply(segs, is.numeric))) 
-            segs <- get.segs(segs, mct = mct, lower.limit = lower.limit, 
-                upper.limit = upper.limit)
-        else stop("If segs is a list, all the components must be numeric")
-    }
-    if (class(segs) == "dstat") {
-        midpoint <- "mean"
-        if (lower.limit == "var") {
-            if (rownames(segs)[2] == "var") 
-                ll <- segs[1, ] - segs[2, ]
-            if (rownames(segs)[2] == "sd") 
-                ll <- segs[1, ] - segs[2, ] * segs[2, ]
-        }
-        if (upper.limit == "var") {
-            if (rownames(segs)[2] == "var") 
-                ul <- segs[1, ] + segs[2, ]
-            if (rownames(segs)[2] == "sd") 
-                ul <- segs[1, ] + segs[2, ] * segs[2, ]
-        }
-        if (lower.limit == "sd") {
-            if (rownames(segs)[2] == "var") 
-                ll <- segs[1, ] - sqrt(segs[2, ])
-            if (rownames(segs)[2] == "sd") 
-                ll <- segs[1, ] - segs[2, ]
-        }
-        if (upper.limit == "sd") {
-            if (rownames(segs)[2] == "var") 
-                ul <- segs[1, ] + sqrt(segs[2, ])
-            if (rownames(segs)[2] == "sd") 
-                ul <- segs[1, ] + segs[2, ]
-        }
-        if (lower.limit == "std.error") {
-            if (rownames(segs)[2] == "var") 
-                ll <- segs[1, ] - sqrt(segs[2, ])/sqrt(segs[3, 
-                  ])
-            if (rownames(segs)[2] == "sd") 
-                ll <- segs[1, ] - segs[2, ]/sqrt(segs[3, ])
-        }
-        if (upper.limit == "std.error") {
-            if (rownames(segs)[2] == "var") 
-                ul <- segs[1, ] + sqrt(segs[2, ])/sqrt(segs[3, 
-                  ])
-            if (rownames(segs)[2] == "sd") 
-                ul <- segs[1, ] + segs[2, ]/sqrt(segs[3, ])
-        }
-        segs <- rbind(segs[1, ], ll, ul, segs[3, ])
-    }
-    segdim <- dim(segs)
-    if (sort.segs) {
-        seg.order <- order(segs[1, ])
-        segs <- segs[, seg.order]
-    }
-    else seg.order <- 1:segdim[2]
-    oldpar <- par("mar")
-    #if (is.na(mar[1])) 
-    #    mar <- c(4, 6, 1 + 2 * (nchar(main) > 0), 5)
-    #par(mar = mar)
-    plot(x = c(min(segs[2, ]), max(segs[3, ])), y = c(1, segdim[2]), 
-        main = main, xlab = "", ylab = "", type = "n", axes = FALSE, 
-        ...)
-    box()
-    if (!is.na(vgrid[1])) 
-        abline(v = vgrid, lty = 1, col = gridcol)
-    if (is.null(hgrid)) 
-        abline(h = 1:segdim[2], lty = 2, col = gridcol)
-    else if (!is.na(hgrid[1])) 
-        abline(h = hgrid, lty = 2, col = gridcol)
-    axis(1, cex.axis = cex)
-    arrows(segs[2, ], 1:segdim[2], segs[3, ], 1:segdim[2], length = 0.05, 
-        angle = 90, code = 3, col = col)
-    points(segs[1, ], 1:segdim[2], pch = pch, col = col, bg = bg)
-    if (is.null(left.labels)) {
-        left.labels <- colnames(segs)
-        if (is.null(left.labels)) 
-            left.labels <- paste("V", seg.order, sep = "")
-    }
-    else left.labels <- left.labels[seg.order]
-    plot.limits <- par("usr")
-    mtext(left.labels, 2, line = 0.2, at = 1:segdim[2], adj = 1, 
-        las = 1, cex = cex)
-    #if (is.null(right.labels)) 
-    #    right.labels <- paste(round(segs[1, ], 2), "(", segs[4, 
-    #        ], ")", sep = "")
-    #else 
-    right.labels <- right.labels[seg.order]
-    mtext(right.labels, 4, line = 0.2, at = 1:segdim[2], adj = 0, 
-        las = 1, cex = cex)
-    #if (is.na(xlab)) 
-    #    xlab <- paste("| -", rownames(segs)[2], "-", rownames(segs)[1], 
-    #        "-", rownames(segs)[3], "- |")
-    if (!is.na(xlab)) 
-        mtext(xlab, 1, line = 2)
-    par(oldpar)
-    invisible(segs)
-}
-
-# 2-D latent space variance by sample ####
-model = latent.srp2.init.r
-sd2 = apply(model$sample$receiver - model$sample$sender, 2, sd)
-latent2 = model$mkl$receiver - model$mkl$sender
-centipede1 = t(cbind(latent2, latent2 - 1.96*sd2, latent2 + 1.96*sd2))
-colnames(centipede1) = Cnet%v%"vertex.names"
-
-# QSE using glm output (account for overdispersion) ####
-shift = mean(g1$coefficients)
-v = c(0, diag(vcov(g1))) #vcov(g1) = summary(g1)$cov.scaled = summary(g1)$cov.unscaled*phi 
-centipede.qse = (cbind(fit.table2$quasi,
-                        fit.table2$quasi - 1.96*fit.table2$qse,
-                        fit.table2$quasi + 1.96*fit.table2$qse)) 
-
-centipede.se = (cbind(g1$coefficients - shift,
-                       g1$coefficients - shift - 1.96*sqrt(v), 
-                       g1$coefficients - shift + 1.96*sqrt(v)))
-rownames(centipede.se) = rownames(fit.table2)
-
-#plot ####
-par(mfrow = c(1,2))
-centipede.plot(centipede1, vgrid = c(-1,0,1,2), cex = .7, right.labels = round(latent2, 2),
-               bg = "red", main = "2-D Latent Space")
-
-centipede.plot(t(centipede.se), vgrid = c(-1,0,1,2), cex = .7, 
-               right.labels = round(fit.table2$quasi, 2), 
-               left.labels = rownames(fit.table2), 
-               bg = c("blue"), col = c("blue"),
-               main = "Quasi-Stigler SE and QSE Intervals",
-               xlim = c(-2, 2.5))
-par(new=TRUE)
-centipede.plot(t(centipede.qse), cex = .7,
-               bg = c("blue"), col = c("cyan"),
-               left.labels = " ",
-               right.labels = " ",
-               xlim = c(-2, 2.5))
-legend("bottomright", legend = c("SE", "QSE"), col = c("blue", "cyan"), pch = 15)
-
-# summary of ses
-summary(sqrt(v)[v>0])
-summary(sd2)
-@
-
-<<r movie_cloud, eval = T, echo = F, fig.height = 6, cache = T, fig.cap = "Uncertainty in estimated film positions illustrated by a sample of positions from the model posterior distribution. Colouring is due to pre-assigned genre labels.">>=
-####  cloud/uncertainty plot  ####
-n = nrow(acw_mat)
-N = 1000
-p = latent_acw2.h[["sample"]][["Z"]]
-s = sample(5000, N)
-
-#null plot:
-plot(latent_acw2.h$mkl$Z, xlab = NA, ylab = NA, type ="n",
-           bty="n", yaxt="n", xaxt="n",  main = NA,
-           xlim = c(-4,5), ylim = c(-4,4))
-
-legend("topright", pch = 16, col = rainbow(5, alpha = 1)[c(4,3,5,2,1)], legend = levels(as.factor(movie_net_acw_full%v%"genres")), bty = "n", legend.ce)
-
-#add points
-for (i in 1:N) {
-  points(p[s[i],,], col = (rainbow(5, alpha = 1)[c(4,3,5,2,1)])[as.numeric(as.factor(movie_net_acw_full%v%"genres"))], pch = 15, cex = .2)
-}
-@
-
-\noindent \section{Appendix: Derivatives for Quasi-Newton Algorithm}\label{Appendix2}
-
-
-\textbf{1. The posterior log likelihood function of interest, up to a constant (denoted $\mathbbm{llik}$):}
-\begin{multline*}
-$$ \displaystyle log(P(\theta|Y)) = \sum_{i}\sum_{j \neq i} y_{ij}(\beta + a_i + b_j - \lVert z_i - z_j \rVert) + exp(\beta + a_i + b_j - \lVert z_i - z_j \rVert) - log(y_ij!)~+ \\
-  \sum_i log(\frac{1}{\sqrt{2\pi\sigma^2_a}}exp(\frac{-a^2_i}{2\sigma^2_a})) ~+~
-  \sum_i log(\frac{1}{\sqrt{2\pi\sigma^2_b}}exp(\frac{-b^2_i}{2\sigma^2_b})) ~+~
-  \sum_{i,d} log(\frac{1}{\sqrt{2\pi\sigma^2_z}}exp(\frac{-z^2_{i,d}}{2\sigma^2_z})) ~+~ 
-  log(\frac{1}{\sqrt{2\pi\sigma^2_\beta}}exp(\frac{-\beta^2}{2\sigma^2_\beta}))~ + ~\\
-  log(\frac{s^2_a\frac{v_a}{2}}{\Gamma(\frac{v_a}{2})})
-    ~-~  \frac{v_as^2_a}{2\sigma^2_a} ~-~ log(\sigma^2_a)(1+\frac{v_a}{2}) ~+~
-  log(\frac{s^2_b\frac{v_b}{2}}{\Gamma(\frac{v_b}{2})}) 
-    ~-~  \frac{v_bs^2_b}{2\sigma^2_b} ~-~ log(\sigma^2_b)(1+\frac{v_b}{2}) ~+~
-  log(\frac{s^2_z\frac{v_z}{2}}{\Gamma(\frac{v_z}{2})}) 
-    ~-~  \frac{v_zs^2_z}{2\sigma^2_z} ~-~ log(\sigma^2_z)(1+\frac{v_z}{2}) \\
-  $$
-\end{multline*}
-
-\noindent \textbf{2. First-order Partial Derivatives:} \newline
-
-\noindent Calculations assume no self-edges, $y_{ii} = 0, \forall~1 \leq i \leq n$.
-
-$$\displaystyle  \frac{\partial \mathbbm{llik}}{\partial a_i} = - \frac{a_i}{\sigma^2_a} + \sum_{j \neq i} y_{ij} - exp(\beta +a_i + b_j - \lVert z_i - z_j \rVert)$$
-
-$$\displaystyle  \frac{\partial \mathbbm{llik}}{\partial b_i} = - \frac{b_i}{\sigma^2_b} + \sum_{j \neq i} y_{ji} - exp(\beta +a_j + b_i - \lVert z_i - z_j \rVert)$$
-
-$$\displaystyle \frac{\partial \mathbbm{llik}}{\partial \beta} = - \frac{\beta}{\sigma^2_\beta} + \sum_i \sum_{j \neq i} y_{ij} - exp(\beta +a_i + b_j - \lVert z_i - z_j \rVert))$$
-
-\begin{align*}
-\displaystyle \frac{\partial \mathbbm{llik}}{\partial z_{i,d}} &= - \frac{z_{i,d}}{\sigma^2_z} + \sum_{j \neq i} \frac{\partial \mathbbm{llik}}{\partial z_{i,d}}(\lVert z_i - z_j \rVert) \Big[ -y_{ij} - y_{ji} + exp(\beta +a_i + b_j - \lVert z_i - z_j \rVert) + exp(\beta +a_j + b_i - \lVert z_i - z_j \rVert) \Big] \\
-  &= - \frac{z_{i,d}}{\sigma^2_z} +
-  \sum_{j \neq i} \frac{1}{\lVert z_i - z_j \rVert}(z_{i,d}-z_{j,d}) \Big[ -y_{ij} - y_{ji} + exp(\beta +a_i + b_j - \lVert z_i - z_j \rVert) + exp(\beta +a_j + b_i - \lVert z_i - z_j \rVert) \Big]
-\end{align*}
-
-\noindent For variance parameters we can solve the first order partial for 0. We outline the calculation for $\sigma^2_a$. 
-
-$$\displaystyle \frac{\partial \mathbbm{llik}}{
-\partial \sigma^2_a} = n(2\pi\sigma^2_a)^{-1}\pi + \sum_i\frac{a_i^2}{2}(\sigma^2_a)^{-2} + \frac{v_as_a^2(\sigma^2_a)^{-2}}{2} - (1+\frac{v_a}{2})(\sigma^2_a)^{-1} = 0$$
-
-$$\displaystyle (\sigma^2_a)^{-1}(\sum_i\frac{a_i^2}{2} + \frac{v_as_a^2}{2}) = \frac{n}{2} + (1+\frac{v_a}{2})$$
-
-
-$$\displaystyle \sigma^2_a = \frac{v_a s^2_a + \sum_i a_i^2}{n + 2 + v_a}$$
-$$\displaystyle \sigma^2_b = \frac{v_b s^2_b + \sum_i b_i^2}{n + 2 + v_b}$$
-$$\displaystyle \sigma^2_z = \frac{v_z s^2_z + \sum_{i,d} z_{i,d}^2}{n*D + 2 + v_z}$$
-
-\break
-
-\noindent \textbf{ 3. Second-order Partial Derivatives: } \newline
-
-$$\displaystyle \frac{\partial^2 \mathbbm{llik}}{\partial a^2_i} = \sum_{j \neq i} - exp(\beta +a_i + b_j - \lVert z_i - z_j \rVert) - \frac{1}{\sigma^2_a} < 0$$
-
-$$\displaystyle \frac{\partial^2 \mathbbm{llik}}{\partial b^2_i} = \sum_{j \neq i} - exp(\beta +a_j + b_i - \lVert z_i - z_j \rVert) - \frac{1}{\sigma^2_b} < 0$$
-
-$$\displaystyle \frac{\partial^2 \mathbbm{llik}}{\partial \beta^2} = - \frac{1}{\sigma^2_\beta} + \sum_i \sum_{j \neq i} - exp(\beta +a_i + b_j - \lVert z_i - z_j \rVert)) < 0$$
-
-$$\displaystyle \frac{\partial \mathbbm{llik}}{
-\partial^2 \sigma^2_a} = -(\sigma^2_a)^{-2}(\sum_i\frac{a_i^2}{2} + \frac{v_as_a^2}{2}) < 0$$ \\
-
-\noindent let $exp(IJ) = exp(\beta +a_i + b_j - \lVert z_i - z_j \rVert)$ \\
-let $exp(JI) = exp(\beta +a_j + b_i - \lVert z_i - z_j \rVert)$
-
-\begin{align*}
-\displaystyle \frac{\partial^2 \mathbbm{llik}}{\partial z^2_{i,d}} & = - \frac{1}{\sigma^2_z} + \sum_{j \neq i} \Big[-\frac{1}{\lVert z_i - z_j \rVert^3}(z_{i,d}-z_{j,d})^2 + \frac{1}{\lVert z_i - z_j \rVert} \Big] \Big[ -y_{ij} - y_{ji} + exp(IJ) + exp(JI) \Big] - \\
-& \indent \sum_{j \neq i} \Big[\frac{1}{\lVert z_i - z_j \rVert^2}(z_{i,d}-z_{j,d})^2\Big](exp(IJ) + exp(JI)) \\
-& = - \frac{1}{\sigma^2_z} + \sum_{j \neq i} \frac{1}{\lVert z_i - z_j \rVert^3}(z_{i,d}-z_{j,d})^2
-\Big[ y_{ij} + y_{ji} - (exp(IJ) + exp(JI))(1 + \lVert z_i - z_j \rVert) \Big] + \\
-& \indent \sum_{j \neq i}\frac{1}{\lVert z_i - z_j \rVert}\Big[ - y_{ij} - y_{ji} + exp(IJ) + exp(JI) \Big]
-\Big]
-\end{align*}
-
-\end{appendix}
 
 \newpage
 
