@@ -51,7 +51,7 @@ We show that quasi-Newton estimation produces results on par with commonly used 
 
 \section{Introduction} \label{Introduction}
 
-\subsection{Rating Methods for Network Data}\label{Rating Methods}
+\subsection{Rating methods for network data}\label{Rating Methods}
     
 The task of rating items from network or incomplete pairwise comparison data is well studied in some settings, such as ranking web pages. Perhaps the best-known ranking algorithm for network data is Google's PageRank algorithm \citep{pagerank99}. Because it is generalizable, fast, and has a guaranteed solution, it has been applied in many settings, including biology, chemistry, ecology, neuroscience, physics, sports and computer systems \citep{gleich14}. In brief, it ranks pages by the eigenvector of the dominant eigenvalue of a Markov transition matrix which describes traffic flow among web pages. The rating corresponds roughly to the equilibrium amount of time an internet user would spend on a specific web page. It is worth noting that the development of PageRank was influenced by earlier work in citation analysis. \citet{pinski76} proposed a similar eigenvalue-based method for scoring journals, with an application to ranking physics journals. 
 % wiki: "The eigenvalue problem was suggested in 1976 by Gabriel Pinski and Francis Narin, who worked on scientometrics ranking scientific journals [7] and in 1977 by Thomas Saaty in his concept of Analytic Hierarchy Process which weighted alternative choices.[8]"
@@ -83,7 +83,7 @@ There is a close relationship between rating objects in networks and measuring n
 %HITS - Authority and hub centrality]
 In contrast, the latent space method introduced below makes allowance for the fact that influence and centrality are not synonymous. An item may not be central, but may nonetheless have the ability to influence disparate items, and this is reflected in its rating.
 
-\subsection{Applications of Latent Space Network Models}\label{Applications}
+\subsection{Applications of latent space network models}\label{Applications}
 
 Latent space network models have been used for various applications, but not specifically for rating, as far as we know. For example, \citet{hoffward04} used a latent space model to visualize the structure of relationships between political actors in Central Asia. %it's bilinear though
 \citet{gormley07} developed a latent space model for rank data and used it to co-locate voters and candidates in an Irish parliamentary election. \citet{sewellchen15} employed such a model to dynamic network data to study network stability and the relationship between popularity and stability. They subsequently extended their model to fit dynamic clusters \citep{sewellchen16}. 
@@ -96,7 +96,7 @@ The latent space network rating method we introduce incorporates the following f
 
 Section \ref{Model} of the paper details the latent space network model we employ and its estimation methods. Sections \ref{Example1} and \ref{Example2} describe two applications of the model, first to ranking statistics journals using citation data and second to rating films from several genres. In both applications we discuss the value added through network visualization. Section \ref{Discussion} concludes the paper with a discussion of benefits, limitations, and possible future improvements to the model.
 
-\section{Latent Space Network Model for Rating} \label{Model}
+\section{Latent space network model for rating} \label{Model}
 
 We denote a network of $n$ nodes by its adjacency matrix $Y = \{y_{ij}\}, 1 \leq i,j \leq n$. A dyad in the network consists of two directed edges, $Y_{ij}$ and $Y_{ji}$. The latent space models introduced by \citet{hoff02} assume that nodes in a network have implicit positions in ``social space''. Given these $d$-dimensional positions, $Z$, as well as possible covariates, $X$, and corresponding parameters $\beta$, the probability of an edge is independent of all other edges. Thus, the probability of a graph $Y$ is the product over its edges
 
@@ -123,7 +123,7 @@ We consider $a_i$ and $b_j$ to be node-specific sender and receiver effects. $\l
 Adapting machinery of the generalized linear model (GLM), let
 
 \begin{align}\label{eq3} 
-E(y_{ij}) &= g^{-1}(\eta_{ij})\\
+E(y_{ij}) &= g^{-1}(\eta_{ij}) \nonumber \\
 \eta_{ij} &= \beta' x_{ij} + a_i + b_j - \lVert z_i - z_j \rVert.
 \end{align}
 
@@ -135,9 +135,9 @@ We note some features of the model:
 
 \begin{itemize}
 
-\item Increasing distance between $z_i$ and $z_j$ implies decreasing expectation of $y_{ij}$. One way to view this is as controlling for similarity between nodes. Nodes with salient similarities are likely to have fitted positions relatively close together. Some of the magnitude of their connection is attributable to their similarly, and the rest to their individual sender ("push") and receiver ("pull") effects.
+\item Increasing distance between $z_i$ and $z_j$ implies decreasing expectation of $y_{ij}$. One way to view this is as controlling for similarity between nodes. Nodes with salient similarities are likely to have fitted positions relatively close together. Some of the magnitude of their connection is attributable to their similarly, and the rest to their individual sender (``push'') and receiver (``pull'') effects.
 
-\item The effect of positions on expected edge weights is symmetric, affecting both edges in a dyad equally. Positions influence the model via the total dyad weight. To condition on the total weight, as in the quasi-Stigler model, effectively eliminates the value of estimated positions.
+\item The effect of positions on expected edge weights is symmetric, affecting both edges in a dyad equally. To condition on total weight, as in the quasi-Stigler method discussed below, greatly diminishes the value of estimated positions.
 
 \item The \textit{rating} or \textit{score} of node $i$ is its receiver minus sender coefficient,
 
@@ -149,9 +149,9 @@ Its \textit{rank} is derived from its order among the ratings.
 
 \end{itemize}
 
-\subsection{Parameter Estimation}\label{Parameter Estimation}
+\subsection{Parameter estimation}\label{Parameter Estimation}
 
-With the introduction of latent space network models, \citet{hoff02} developed a stochastic Markov chain Monte Carlo (MCMC) estimation algorithm. \citet{hoff03} added the capacity to fit random effects, and \citet{krivitskyetal09} extended the model further and refined the underlying algorithm. In this section we present an overview of the MCMC estimation described by those authors, adapted for the latent space rating model and embellished with details from the \pkg{latentnet} implementation \citep{latentnet_jss, latentnet}. We conclude by discussing previous use of quasi-Netwon estimation and tradeoffs between this strategy and MCMC.
+With the introduction of latent space network models, \citet{hoff02} developed a Markov chain Monte Carlo (MCMC) estimation algorithm. \citet{hoff03} added the capacity to fit random effects, and \citet{krivitskyetal09} extended the model further and refined the underlying algorithm. In this section we present an overview of the MCMC estimation described by those authors, adapted for the latent space rating model and embellished with details from the \pkg{latentnet} implementation \citep{latentnet_jss, latentnet}. We conclude the section by discussing previous use of quasi-Newton estimation for latent space models and tradeoffs between this strategy and MCMC. 
 
 First, we describe the Bayesian framework and initialization method. This applies to both MCMC estimation and direct optimization by a quasi-Newton method. Our aim is to return a sample from the posterior parameter distribution and desired point estimates, such as a maximum likelihood estimate, posterior mean and mode. We adapt Equation \ref{eq1} for the case when the random effects are as described in (\ref{eq2}), and our only nodal covariate is the intercept term, $B_0$.
 
@@ -240,14 +240,14 @@ The initial intercept is composed of an ``edge intercept,'' a valued-network ana
 % Ym01<-Ym>mean(Ym,na.rm=TRUE)
 % pm[["beta"]]<-logit(mean(Ym01,na.rm=TRUE))+if(!is.null(pm[["Z"]]))mean(dist2(pm[["Z"]])) else 0 #edge intercept + distance intercept
 
-\item[] The initial values of $\displaystyle \sigma_z^{2(0)}, \sigma_a^{2(0)},\text{and } \sigma_b^{2(0)}$ are the variance of $z^{(0)}, a^{(0)},\text{and }b^{(0)})$, respectively.
+\item[] The initial values of $\displaystyle \sigma_z^{2(0)}, \sigma_a^{2(0)},\text{and } \sigma_b^{2(0)}$ are the variances of $z^{(0)}, a^{(0)},\text{and }b^{(0)}$, respectively.
 \end{itemize}
 
-\emph{Parameter Updates}:  \newline
+\noindent \emph{Parameter Updates}:  \newline
 
-Before starting an MCMC chain, \pkg{latentnet} employs an intermediate optimization step. It uses the bounded quasi-Newton optimization routine of \citet{lbfgsb}, as implemented in the \code{optim} function of the \proglang{R} base package \pkg{stats}. This returns starting values for MCMC with higher posterior likelihood than the initial values described above. In fact, for our applications the results are competitive with the final MCMC output, and we compare them in Section \ref{estimeval}.
+Before starting an MCMC chain, \pkg{latentnet} employs an intermediate optimization step. It uses the bounded quasi-Newton optimization routine of \citet{lbfgsb}, as implemented in the \code{optim} function of the \proglang{R} base package \pkg{stats}. This returns starting values for MCMC with higher posterior likelihood than the initial values described above. In our applications the results are competitive with the final MCMC output, and we compare them in Section \ref{estimeval}.
 
-After intermediate optimization, the MCMC chain runs through a suitably long burn-in period. If the automated burn-in length is insufficient, proper length can be determined by carrying out MCMC diagnostics on the results, such as those in the \code{mcmc.diagnostics} method of \pkg{latentnet}. Once starting values for the MCMC sampling are determined, parameters are updated as follows:  
+After intermediate optimization, the MCMC chain runs through a suitably long burn-in period. If the automated burn-in length is insufficient, proper length can be determined by carrying out MCMC diagnostics on the results, such as those in the \code{mcmc.diagnostics} function of \pkg{latentnet}. Once starting values for MCMC sampling are determined, parameters are updated as follows:  
 
 %what is the ordering/grouping of parameter updates? latentnet allows for group.deltas for proposing changes to multiple parameters simultaneously. When are they updated singly vs as a group?
 
@@ -297,7 +297,7 @@ The sender, receiver and position parameters cannot be sampled directly and may 
 
   \item \textit{Proposal Variances} $\tau_z^2, \tau_a^2, \tau_b^2, \tau_{\beta,a,b,z}$:
   
-  The variances of the proposal distributions are set adaptively during the burn-in period to stay near a fixed acceptance rate, with a default target rate of 0.234 (\cite{latentnet_jss} following \cite{nealandroberts}).
+  The variances of the proposal distributions are set adaptively during the burn-in period to stay near a fixed acceptance rate, with a default target rate of 0.234 (\cite{latentnet_jss}, following \cite{nealandroberts}).
   
 \end{itemize}
 
@@ -315,11 +315,11 @@ The sender, receiver and position parameters cannot be sampled directly and may 
   
   The likelihood depends on positions only through their pairwise distances, and is invariant to rotations, reflections and translations of the positions. We are interested in the posterior variance in positions that comes from changing distances between points rather than distance-preserving transformations. One way to address this and stabilize our estimates is to store not the sampled positions, but a transformed set that has minimal squared distance to a set of reference positions. This is the Procrustean transformation used by \citet{hoff02}. They let $z^*_{store} = argmin_{Tz^*}tr(z_{ref} - Tz^*)^\top(z_{ref} - Tz^*)$, where $T$ is the set of distance-preserving transformations.
   
-There may also be strong correlation or near non-identifiability between a node's actor-specific parameters, especially if it is poorly connected. To reduce instability in the estimate \citet{shortreed06} considered the parameter estimate that is optimal in the sense of minimizing Bayes risk with a Kullback-Leibler (KL) loss function. Their ``MKL'' estimate minimizes the posterior expectation of the KL divergence from its predictive distribution of networks to the posterior predictive distribution of networks. As such, the MKL estimate only pertains to the parameters on which networks are immediately dependent.
+There may be strong correlation or near non-identifiability between a node's actor-specific parameters, especially if it is poorly connected. To reduce instability in the estimate \citet{shortreed06} considered the parameter estimate that is optimal in the sense of minimizing Bayes risk with a Kullback-Leibler (KL) loss function. Their ``MKL'' estimate minimizes the posterior expectation of the KL divergence from its predictive distribution of networks to the posterior predictive distribution of networks. As such, the MKL estimate only pertains to the parameters on which networks are immediately dependent.
 \begin{equation}
 \theta_{MKL} = argmin_{\widetilde{Z} \widetilde{a}, \widetilde{b}, \widetilde{\beta}} \left[ E_{Z, a, b, \beta|Y_{obs}}\left[\sum_Y log(\frac{P(Y|Z, a, b, \beta)}{P(Y|\widetilde{Z} \widetilde{a}, \widetilde{b}, \widetilde{\beta})})P(Y|Z, a, b, \beta)\right]\right]
 \end{equation}
-The MKL positions are more stable than standard point estimates because they average over all networks. They require the posterior sample to calculate, so unlike \citet{hoff02} the sampled positions are transformed with MKL positions as reference after the sampling is complete.
+The MKL positions are more stable than standard point estimates because they average over all networks. They require the posterior sample to calculate, so, unlike \citet{hoff02}, the sampled positions are transformed with MKL positions as reference \textit{after} the sampling is complete.
 
 <<r invchisq, eval = T, results = 'hide', echo = F, cache = T, warning = F, message = F>>=
 #took these from geoR package which was crashing
@@ -353,24 +353,16 @@ dinvchisq <-function (x, df, scale = 1/df, log = FALSE)
 
 %Estimation is implemented in the \code{ergmm} function of \pkg{latentnet} \citep{latentnet_jss}. 
 
-\subsubsection{Quasi-Newton Estimation}\label{QN}
+\subsubsection{Quasi-Newton estimation}\label{QN}
 
-While the MCMC sample is useful for interval calculations, the rankings themselves rely only on a point estimate. A variety of strategies are available for this optimization problem, but here we present a quasi-Newton method that is fast, transparent, and performs well in applications. \newline
-  
-\emph{Parameter Updates}:  \newline
+Typically, quasi-Newton estimation has been used as an initialization step of MCMC, as in \citet{hoff02} and \citep{latentnet}. \citet{handcock07} employed it for the first stage of a two-stage maximum likelihood method to estimate a latent space cluster model. They found that the two-stage MLE gives a good match to the MCMC fit in terms of cluster membership and relative positions, but the clusters are more spread out. However, in that case, it was only applied to the simplified model without clusters, so it could not capture dependence between positions and cluster assignments. In addition, the networks being modelled were binary, so edges provided less granular information than in valued networks.
 
-%Advantage of gradient descent:
-%- can pick out nodes causing problems due to lack of connectivity by non-converging derivative
-%- know for sure and easily when it's converged to local opt.
-%- widely used and accesible to a wide audience
+Methods proposed to speed up latent space mode fitting, such as the variational Bayesian method of \citet{vblpcm10, vblpcm} or the case-control approximate likelihood of \citet{raftery12}, treat Bayesian MCMC as the benchmark for estimation speed and complexity. These methods compromise the true likelihood function and introduce bias on behalf of speed, justified by impracticality of MCMC estimation. In examples of \citet{vblpcm10}, positions fit by the variational Bayesian algorithm also show greater within-cluster variance than MCMC estimates. In our trials on networks of up to several hundred nodes, results from quasi-Newton estimation closely approximate those from MCMC, as we discuss in Sections \ref{estimeval} and \ref{Model2}.
 
- We conclude by discussing previous use of quasi-Netwon estimation and tradeoffs between this strategy and MCMC.
- 
-The main argument against using a quasi-Newton estimation method is that it is not guaranteed to converge to a global optimum since the likelihood function is not convex. However, there are several reasons why it is often still successful in practice. First, in applications well suited to latent space network rating the search space for the positions is relatively small. This is especially true when positions are in low dimension. Second, although MCMC estimation is theoretically guaranteed to converge to the true distribution, if the search space is large and the likelihood function jagged it may face prohibitively slow mixing time and fail to converge to the global optimum. It is easier to diagnose specific points of non-convergence in the quasi-Newton method using the stored derivatives. Third, the speed of the quasi-Newton method means we can consider many initial values to increase our chance of finding the a global optimum. Lastly, we are still able to use MCMC estimation to provide a check on our fit. Using the quasi-Newton estimate to seed the MCMC chain we can generate a useful sample from the posterior and may be able to improve on our results while still reducing the overall time to fit. In our trials on networks of up to several hundred nodes, results from quasi-Newton closely approximated those from MCMC.
+The main argument against a quasi-Newton estimation method is that it is not guaranteed to converge to a global optimum since the likelihood function is not convex. However, there are several reasons why it is often still successful in practice. First, in applications well suited to latent space network rating the search space for the positions is relatively small. This is especially true when positions are in low dimension. Second, although MCMC estimation is theoretically guaranteed to converge to the true distribution, it may face prohibitively slow mixing time and fail to converge to the global optimum. We see a minor example of this in Section \ref{estimeval}. Third, the speed of the quasi-Newton method means we can consider many initial values to increase our chance of finding the global optimum. If necessary, we can still use MCMC estimation to validate the quasi-Netwon results, but with a much smaller burn-in than would otherwise be required.
 
-Direct optimization of latent-space models has been used previously. \citet{handcock07} compared a two-stage maximum likelihood method to MCMC estimation for a latent space cluster model. They found that the two-stage MLE gives a good match to the MCMC fit in terms of cluster membership and relative positions, but the clusters are more spread out. In that case, the MLE is fit to the model without clusters, so it cannot capture dependence between positions and cluster assignments. In addition, the network fit are binary, so they provide less information than valued networks when fitting positions. More typically, direct optimization is used as an initialization step of MCMC, as in \citet{hoff02} and \citep{latentnet}. Methods introduced to speed up estimation such as the variational Bayesian method of \citet{vblpcm10, vblpcm} or the case-control approximate likelihood method of \citet{raftery12}, treat Bayesian MCMC estimation as the benchmark for complexity. Yet these methods compromise the true likelihood function on behalf of speed. For instance, positions fit by the variational Bayesian algorithm also show greater within-cluster variance than MCMC estimates \citep{vblpcm10}.
+Although quasi-Newton estimation does not return a sample from the posterior parameter distribution like MCMC estimation does, we can still approximate the uncertainty in ratings using a Poisson GLM. This is described in Section \ref{estimeval}. While there may be strong dependence between positions and sender or receiver parameters, the dependence between the positions and the ratings (receiver minus sender) is much less. This is confirmed by the similarity we find between MCMC estimates of ratings uncertainty and those by the Poisson GLM.
 
-Although the scaling of the adjacency matrix, $\mathcal{O}(n^2)$, is problematic for quasi-Networn estimation, the number of iterations required is drastically smaller than for MCMC. Below 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % SETUP FOR APPLICATION SECTION %
@@ -480,11 +472,9 @@ dist2 <- function(Z) {
 
 @
 
-In the next section we apply latent space rating to rank a set of statistics journals. We evaluate the results and compare them to existing journal-ranking methods.
-
 %could potentially embed users in the same network...for later
 
-\section{Ranking Statistics Journals Using Citation Data}\label{Example1}
+\section{Ranking statistics journals using citation data}\label{Example1}
 
 In this section we examine rankings of 47 statistics and probability journals. The data set we consider was gathered and analyzed by \citet{varinetal} from Journal Citation Reports \citep{JCR}. It consists of a $47 \times 47$ matrix of directed citation counts, encompassing within-network citations from 2001 to 2010. We compare latent space model rankings to several competing methods in Section \ref{Comparison}, visualize our results in Section \ref{Visualization}, and evaluate competing models and estimation methods in Section \ref{modeleval}. 
 
@@ -501,10 +491,10 @@ ji = Cmatrix[lower.tri(Cmatrix, diag = F)]
 cor(ij, ji)
 @
 
-First, Impact Factor does not normalize for article length or out-citations. Whether planned or not, there is documented reciprocity in citations between journals. (In our data the correlation in one-way citations is $0.57$.) Second, it does not account for differences in citation patterns between fields, such as mathematics papers tending to have relatively few citations \citep{if_fraction}. Third, the distribution of citations counts by article is very long-tailed, with a few articles receiving many citations and most receiving only a few. As Colquhoun wrote in the Discussion on the paper by \citet{varinetal}, ``It has been obvious for a long time that it is statistically illiterate to characterize very skew distributions by their mean. And it is statistically illiterate to present point estimates with no indication of their uncertainty'' \citep{varincomment}. %latent space ranking uses totals, not means, and has a measure of uncertainty 
+First, Impact Factor does not normalize for article length or out-citations. Whether planned or not, there is documented reciprocity in citations between journals. (In our data the correlation in one-way citations is $0.57$.) Second, it does not account for differences in citation patterns between fields, such as mathematics papers tending to have relatively few citations while bioscience papers have many \citep{if_fraction}. Third, the distribution of citations counts by article is very long-tailed, with a few articles receiving many citations and most receiving only a few. As Colquhoun wrote in the Discussion on the paper by \citet{varinetal}, ``It has been obvious for a long time that it is statistically illiterate to characterize very skew distributions by their mean. And it is statistically illiterate to present point estimates with no indication of their uncertainty'' \citep{varincomment}. %latent space ranking uses totals, not means, and has a measure of uncertainty 
 %https://www.timeshighereducation.com/news/citation-averages-2000-2010-by-fields-and-years/415643.article
 
-\subsection{The Quasi-Stigler Model} \label{QS}
+\subsection{The quasi-Stigler model} \label{QS}
  
 \citet{varinetal} introduced the \textit{quasi-Stigler} model to address the criticisms above. The second criticism is not accounted for by the model, but by restricting the data to only 47 out of 110 journals of statistics and probability. The quasi-Stigler model requires that journals are fairly homogeneous and have a relatively high level of citation exchange. %"A key requirement for the methods that are described here, as well as in our view for any sensible analysis of citation data, is that the journals jointly analysed should be as homogeneous as possible. Accordingly, analyses are conducted on a subset of the journals from the statistics and probability category, among which there is a relatively high level of citation exchange."" [@varinetal]
 
@@ -689,9 +679,9 @@ To connect the quasi-Stigler model to the latent space model, consider the quasi
 % Should the quasi-symmetry formulation have the additional constraint explicitly that E(c_ij) + E(c_ji) = T_ij,
 % i.e. exp(a_i + b_j) + exp(a_j + b_i) = 1 ?
 
-\subsection{Comparison of Journal Rankings} \label{Comparison}
+\subsection{Comparison of journal rankings} \label{Comparison}
 
-We compare the rankings from our latent space model to others discussed. Unless otherwise stated, our results are based on two-dimensional MKL parameter estimates from MCMC estimation with the initialization strategy of our quasi-Newton method. These had the highest posterior probability and likelihood of any two-dimensional estimates considered. In Section \ref{modeleval} we provide a foundation for the choice of model dimension and estimation method. The \proglang {R} code used to implement our model and PageRank is included in the supplementary material. 
+We compare the rankings from our latent space model to others discussed. Unless otherwise stated, our results are based on two-dimensional MKL parameter estimates from MCMC estimation. These had the highest posterior probability and graph probability of any two-dimensional estimates considered. In Section \ref{modeleval} we provide a foundation for the choice of model dimension and estimation method. The \proglang {R} code used to implement our model and PageRank is included in the supplementary material. 
 
 %%%%%%%%%%%%%%%%%%%
 % CITATION MODELS %
@@ -1045,7 +1035,7 @@ summarytable_rank = data.frame(
 rownames(summarytable_rank) = rownames(summarytable_rate) 
 
 library(xtable)
-summary_xtable_rank <- xtable(summarytable_rank, caption = "Comparison of journal rankings", digits = 0, label = "summarytable_rank")
+summary_xtable_rank <- xtable(summarytable_rank, caption = "Comparison of journal rankings. The ``big four'' have gray background.", digits = 0, label = "summarytable_rank")
    
 summary_xtable_rate <-xtable(round(cor(summarytable_rate),2), caption = "Correlation of journal rating methods", label = "correlation_table")
 
@@ -1066,19 +1056,19 @@ Table \ref{summarytable_rank} compares journal rankings from the latent space mo
 %Explain how I fit all these/whether the data's from. Include code for latent space model?
 Comparisons to other versions of the Impact Factor can be found in Table 4 of \citeauthor{varinetal} for a slightly different data set. Table \ref{summarytable_rank} presents ranks rather than ratings to facilitate comparisons across the methods. According to \citet{varinetal}, there is ``diffuse opinion'' among statisticians that the most prestigious statistics journals are, in alphabetical order, \textit{Annals of Statistics} (AoS), \textit{Biometrika} (Bka), the \textit{Journal of the American Statistical Association} (JASA) and the \textit{Journal of the Royal Statistical Society}, Series B (JRSS-B). (These journals have gray background in Table \ref{summarytable_rank}.) Accordingly, they argue that a good rating method will put them near the top.
 
-Although PageRank ranks the ``big four'' journals highest, it places \textit{Statistics in Medicine} (StMed), \textit{Journal of Statistical Planning and Inference} (JSPI), and \textit{Computational Statistics and Data Analysis} (CSDA) in positions six through eight, much higher than most other methods. These journals have the three highest out-citation counts in our data, and are among the most prolific citers of the top four journals. However, their ratios of in- to out-citations rank 20th, 30th, and 35th. Eigenfactor behaves similarly to PageRank, with some differences reflecting its use of normalized data. (Eigenfactor is strongly correlated with PageRank, $0.91$, as shown in Table \ref{correlation_table}.) We conclude that PageRank and Eigenfactor are better measures of centrality or activity than importance, influence or prestige. 
+Although PageRank ranks the ``big four'' journals highest, it places \textit{Statistics in Medicine} (StMed), \textit{Journal of Statistical Planning and Inference} (JSPI), and \textit{Computational Statistics and Data Analysis} (CSDA) in positions six through eight, much higher than most other methods. These journals have the three highest out-citation counts in our data, and are among the most prolific citers of the top four journals. However, their ratios of in- to out-citations rank 20th, 30th, and 35th. Eigenfactor behaves similarly to PageRank, with some differences reflecting its use of normalized data. (Eigenfactor is strongly correlated with PageRank, $0.91$, as shown in Table \ref{correlation_table}.) We conclude that PageRank and Eigenfactor are better measures of centrality or activity level than importance, influence or prestige. 
 
 The Impact Factor rankings show the detriment of averaging per article and not controlling for out-citations or a citation's field of origin. For example, \textit{Environmental and Ecological Statistics} (EES) ranks 14th and the \textit{Journal of Statistical Software} (JSS) ranks 4th, though they have the second- and ninth-lowest in-citation counts in our data. On the other hand, the ``big four'' journals Bka and JASA are ranked 11th and 8th. The Impact Factor ratings are most strongly correlated with Article Influence ($0.87$, see Table \ref{correlation_table}), which is also normalized by articles per journal and calculated using all citations, not just ones from the $47$ journals in our data set.  %I checked and pagerank calculated on normalized data and just the 47 jounals is pretty similar to Eigenfactor.
-The two methods share some anomalous rankings, such as \textit{Statistical Science} placing 2nd and 6th respectively. We argue that the high rank for this journal is not reflective of its importance within the field. Rather, it owes to its connections to top journals (confirmed by PageRank and Eigenfactor ranking it 13th) and a relatively low number of articles published. Its ratio of in- to out-citations ranks 24th in the network. As a review journal it is more likely to disseminate than publish cutting-edge research. The visualizations provided by the latent space model help to further explain the position of \textit{Statistical Science}, which will be revisited below.
+The two methods share some anomalous rankings, such as \textit{Statistical Science} placing 2nd and 6th respectively. We argue that the high rank for this journal is not reflective of its importance within the field. As a review journal it is more likely to disseminate than publish cutting-edge research. It owes its high rank to connections to top journals (confirmed by PageRank and Eigenfactor ranking it 13th), citations from outside statistics, and a relatively low number of articles published. Its ratio of in- to out-citations ranks 24th in the network. The visualizations provided by the latent space model help to further explain the position of \textit{Statistical Science}, which will be revisited below.
 %The journal's founding editor stated that a central goal of the journal is ``presenting the full range of contemporary statistical thought at a modest technical level accessible to the wide community of practitioners, teachers, researchers and students of statistics and probability'' \citep{degroot86}.
 
-The Latent Space and quasi-Stigler rankings are very similar (correlation $0.99$, see Table \ref{correlation_table}) and seem to provide the best measures of influence or importance in the field. They rank the ``big four'' journals in the top four positions, the \textit{Journal of Statistical Software} 42nd, and \textit{Statistical Science} 19th and 18th respectively. On the other hand, the methodological journal \textit{Scandinavian Journal of Statistics} (SJS) is highly ranked by both, at 6th and 8th respectively. SJS states its mission as ``reporting significant and innovative original contributions to statistical methodology, both theory and applications'' \citep{SJS}. \citet{varinetal} use data from the UK Research Assessment Exercise (RAE), a periodic evaluation of UK university departments, as an external check on the quasi-Stigler rankings. They find some evidence that the quasi-Stigler model provides stronger correlation to RAE assessment of research quality than other methods. Details of that comparison, and its many caveats, are found in Section 6 of \citet{varinetal}.
+The latent space and quasi-Stigler rankings are very similar (correlation $0.99$, see Table \ref{correlation_table}) and seem to provide the best measures of influence or importance. They rank the ``big four'' journals in the top four positions, the \textit{Journal of Statistical Software} 42nd, and \textit{Statistical Science} 19th and 18th respectively. On the other hand, the methodological journal \textit{Scandinavian Journal of Statistics} (SJS) is highly ranked by both, at 6th and 8th respectively. SJS states its mission as ``reporting significant and innovative original contributions to statistical methodology, both theory and applications'' \citep{SJS}. \citet{varinetal} use data from the UK Research Assessment Exercise (RAE), a periodic evaluation of UK university departments, as an external check on the quasi-Stigler rankings. They find some evidence that the quasi-Stigler model provides stronger correlation to RAE assessment of research quality than other methods. Details of that comparison, and its many caveats, are found in Section 6 of \citet{varinetal}.
 
-\subsubsection{Comparison of Latent Space and Quasi-Stigler Model Output}\label{Comparison1}
+\subsubsection{Comparison of latent space and quasi-Stigler model output}\label{Comparison1}
 
 As the quasi-Stigler and latent space models emerge as the best suited to our ranking priorities, we compare their results most closely. Figure \ref{fig:r latent2_stigler} (left) plots the compared ranks, with lighter labels for larger differences in rank. Three is the highest observed difference. However, the underlying differences in scores are very small, as shown in the right panel of Figure \ref{fig:r latent2_stigler}. Figure \ref{fig:r latent2_joy} plots the posterior distributions of latent space scores. It confirms that the small differences in rank shown in Figure \ref{fig:r latent2_stigler} are not significant given the uncertainty in the estimated scores, highlighting the importance of capturing model uncertainty.
 
-<<r latent2_stigler, eval = T, echo = F, cache = T, warning = F, message = F, fig.height = 3, fig.width = 6, fig.align = "center", results = 'hide', dependson= c("setup", "latent_sr2"), fig.cap = 'Left: Latent space vs. quasi-Stigler rankings. Better-ranked journals are at the top right, corresponding to higher numbers. Right: Comparison of scores rather than rankings. Lighter labels means larger differences (maximum rank difference is 3).'>>=
+<<r latent2_stigler, eval = T, echo = F, cache = T, warning = F, message = F, fig.height = 3, fig.width = 6, fig.align = "center", results = 'hide', dependson= c("setup", "latent_sr2"), fig.cap = 'Left: Latent space vs. quasi-Stigler rankings. Better-ranked journals are at the top right, corresponding to higher numbers. Right: Comparison of scores rather than rankings. Lighter labels means larger differences. Maximum observed rank difference is 3.'>>=
 
 par(mfrow = c(1,2))
 par(mai = c(.8,.8,.8,.4))
@@ -1106,7 +1096,7 @@ rc = ggplot(data = srs2b, aes(x = quasi.Stigler, y = latent_space,
     scale_color_gradient(low = "black", high = "gray", guide = F) + 
     theme_bw() +
     ylab("2D Latent Space") +
-    ggtitle(label = "Rank Comparison") +
+    ggtitle(label = "Rank comparison") +
     theme(plot.title = element_text(size = 12))
 
 sc = ggplot(data = srs2, aes(x = quasi.Stigler, y = latent_space,
@@ -1115,7 +1105,7 @@ sc = ggplot(data = srs2, aes(x = quasi.Stigler, y = latent_space,
     geom_point() +
     theme_bw() +
     ylab("2D Latent Space") +
-    ggtitle(label = "Score Comparison") +
+    ggtitle(label = "Score comparison") +
     theme(plot.title = element_text(size = 12))
 
 cowplot::plot_grid(rc, sc)
@@ -1138,7 +1128,7 @@ tmp = data.frame(score = as.vector(quantiles2), node = as.factor(rep(1:47, each 
 
 # Plot
 ggplot(tmp, aes(x = score, y = node)) + geom_joy() + 
-  ggtitle("Posterior Distributions of Latent Space Scores") +
+  ggtitle("Posterior distributions of latent space scores") +
   theme_bw() + 
   theme(plot.title = element_text(size = 12),
         axis.text.y = element_text(size = 7)) +
@@ -1148,7 +1138,7 @@ ggplot(tmp, aes(x = score, y = node)) + geom_joy() +
 
 @
 
-Uncertainty in ratings is very similar between the two models, with quasi-Stigler standard deviations being 0.04 smaller on average, and at most 0.069 smaller. Under both models, \textit{Stata Journal} (StataJ) has the largest standard error, which is due to the fact that it has by far the fewest in- and out-citations. As expected, standard error of scores and citation counts are inversely correlated. Figure \ref{fig:r latent2_centipede} shows point estimates from each model in intervals of $1.96$ estimated standard deviations in either direction. On the left, the variances of the latent space scores are calculated from a sample of 5000 draws from the posterior distribution of parameters stored during MCMC estimation. On the right, the longer intervals are calculated from standard errors extracted from the scaled covariance matrix of the model. The interval for \textit{American Statistician} (AmS) is missing because its coefficients were fixed at zero for identifiability. The interior intervals are 1.96 quasi-standard errors (QSE) in each direction. These ``comparison intervals" are analogous to those in Figure 4 of \citet{varinetal}. We see that they are smaller and more variable than the true standard error intervals. The justification by \citeauthor{varinetal} to present uncertainty through quasi-standard errors is that they can be listed alongside estimates in a table, and allow a familiar Pythagorean estimate of the standard error of a difference of two export scores.  However, in a centipede plot as shown, the true standard errors are just as compact and easy to compare, and reveal that the uncertainty in scores is roughly equivalent between the two models. 
+Uncertainty in ratings is very similar between the two models, with quasi-Stigler standard deviations being 0.04 smaller on average, and at most 0.069 smaller. Under both models, \textit{Stata Journal} (StataJ) has the largest standard error, which is due to the fact that it has by far the fewest in- and out-citations. As expected, standard error of scores and citation counts are inversely correlated. Figure \ref{fig:r latent2_centipede} shows point estimates from each model inside intervals of $1.96$ times the standard error in either direction. On the left, the variances of the latent space scores are calculated from a sample of 5000 draws from the posterior distribution of parameters stored during MCMC estimation. On the right, the longer intervals are calculated from standard errors extracted from the scaled covariance matrix of the model. The interval for \textit{American Statistician} (AmS) is missing because its coefficients were fixed at zero for identifiability. The interior intervals are 1.96 quasi-standard errors (QSE) in each direction. These ``comparison intervals" are analogous to those in Figure 4 of \citet{varinetal}. We see that they are smaller and more variable than the true standard error intervals. The justification by \citeauthor{varinetal} to present uncertainty through quasi-standard errors is that they can be listed alongside estimates in a table, and allow a familiar Pythagorean estimate of the standard error of a difference of two export scores.  However, in a centipede plot as shown, the true standard errors are just as compact and easy to compare, and reveal that the uncertainty in scores is roughly equivalent between the two models. 
 
 <<latent_binomial, eval = F, echo = F, cache = T, warning = F, results = 'hide'>>=
 
@@ -1157,6 +1147,19 @@ Uncertainty in ratings is very similar between the two models, with quasi-Stigle
 # one way we can interpret this as: total citations exchanged
 # between two journals depends on positions, but given that total, 
 # the specific taken by each can be modeled with just sender/receiver
+
+llik2 <- function(theta, Y = t(Cmatrix), d = 2, n=47, family = "poisson", est = "MAP") {
+    a = theta[1:n]
+    b = theta[(n+1):(2*n)]
+    B = theta[(2*n+1)]
+    Z = matrix(theta[(2*n+2):(2*n+1+d*n)], ncol = d, nrow = n)
+    sigma2_a = theta[2*n+2+d*n]
+    sigma2_b = theta[(2*n+3+d*n)]
+    sigma2_z = theta[(2*n+4+d*n)]
+    return(llik(Y=Y, sender = a, receiver = b, beta = B, Z = Z,
+                sender.var = sigma2_a, receiver.var =sigma2_b,
+                Z.var = sigma2_z, family = family, est = est))
+  }
 
 theta = optim(c(a, b, B, Z),
                    Y = t(Cmatrix), d = 2, family = "binomial", llik2,
@@ -1297,7 +1300,7 @@ centipede.plot <- function (segs, mct = "mean", lower.limit = "std.error", upper
 }
 @
 
-<<r latent2_centipede, eval = T, echo = F, cache = T, warning = F, message = F, dependson= c("setup", "latent_sr2", "setup_jrss", "latent2_stigler"), fig.height = 5.5, fig.pos = "H", fig.cap = "Visualizing uncertainty in latent space scores (left) and quasi-Stigler scores (right). The error bars are +/- 1.96 estimates of standard deviation (left) and quasi-standard error (right). Comparison of ``comparison intervals'' around estimated values, which are equal to 1.96$*$QSE in each direction, and 1.96$*$SE in each direction. Note that due to fit constraints, AMS only has an estimated QSE.">>=
+<<r latent2_centipede, eval = T, echo = F, cache = T, warning = F, message = F, dependson= c("setup", "latent_sr2", "setup_jrss", "latent2_stigler"), results = "hide", fig.height = 5.5, fig.width = 6, fig.align = "center", fig.pos = "H", fig.cap = "Visualizing uncertainty in latent space scores (left) and quasi-Stigler scores (right). The error bars are +/- 1.96*SE in each direction, and inner intervals on the right are ``comparison intervals'' equal to 1.96$*$QSE in each direction. Due to quasi-Stigler model constraints, AMS only has an estimated QSE.">>=
 
 # from plotrix package, but made some changes ####
 # added cex arg and commented out something with segs[4, and x axis label
@@ -1560,7 +1563,7 @@ legend("bottomright", legend = c("SE", "SIM"), col = c("red", "green"), pch = 16
 
 @
 
-\subsection{Visualization of Latent Space Journal Rankings} \label{Visualization}
+\subsection{Visualization of latent space journal rankings} \label{Visualization}
 
 <<r latent_sr2_plot, eval = T, cache = T, dependson= c("setup", "setup2", "latent_sr2", "setup_jrss"), echo = F, fig.width = 6, cache = T, warning=F, message=F, fig.cap= 'Estimated journal positions from the two-dimensional latent space model. Top: Point estimates with node size scaled to receiver minus sender coefficient. Bottom: Sample of positions from the model. Colouring is due to the hierarchical clustering of Varin et al. '>>=
 
@@ -1693,48 +1696,48 @@ visNetwork(nodes, edges2, main = "Statistics Journals", submain = "latent space 
 #saved as citation_net_revised.html        
 @
 
-Now we revisit the rankings of journals discussed in Section \ref{Comparison}. The ``big four'' journals all draw citations widely from the network but tend to cite journals fairly nearby. In contrast, StMed, JSPI and CSDA, which are ranked highly by PageRank and Eigenfactor but not the latent space model, give and receive citations from a wide range of journals. JSS, which is ranked highly by Impact Factor and Article Influence but 42nd by the latent space model, only accounts for significant out-citations from StataJ. \textit{Statistical Science} does draw citations from two top-four journals, but not at the rate of the highest-ranked journals. Its in-citations have roughly the same span as its out-citations, but generally come from theoretical or computational journals and go to theoretical or applied ones. The visualization helps to explain how research flows through the network.
+Now we revisit the rankings of journals discussed in Section \ref{Comparison}. The ``big four'' journals all draw citations widely from the network but tend to cite journals fairly nearby. In contrast, StMed, JSPI and CSDA, which are ranked highly by PageRank and Eigenfactor but not the latent space model, give and receive citations from a wide range of journals. JSS, which is ranked highly by Impact Factor and Article Influence but 42nd by the latent space model, only accounts for significant out-citations from StataJ. \textit{Statistical Science} does draw citations from two top-four journals, but not at the rate of the highest-ranked journals. Its in-citations have roughly the same span as its out-citations, but generally come from theoretical or computational journals and go to theoretical or applied ones. The visualization helps us to see how research flows through the network.
 
-\subsection{Model Evaluation} \label{modeleval}
+\subsection{Model evaluation} \label{modeleval}
 
-Having illustrated the value of latent space rankings and visualization, in this section we compare competing latent space models and estimation methods. We discuss the choice of model dimension, model fit to the observed network, sensitivity to hyperpriors, and tradeoffs between estimation methods. The section concludes with a simulation study of our quasi-Newton algorithm. 
+Having illustrated the value of the latent space rating model, in this section we compare competing latent space models and estimation methods. We discuss the choice of model dimension, model fit to the observed network, tradeoffs between estimation methods, and sensitivity to hyperpriors.
 
-\subsubsection{Latent Dimension} \label{dim}
+\subsubsection{Latent dimension} \label{dim}
 
-To choose the latent space dimension of the model we consider estimates of the Bayesian information criterion (BIC), which is itself a form of estimate of the integrated likelihood for the data under the model. %P(Y) = \int P(\theta|Y)P(\theta)d\theta. 
+To choose the latent space dimension of the model we consider adaptations of the Bayesian information criterion (BIC), an estimate of the integrated likelihood of the data. %P(Y) = \int P(\theta|Y)P(\theta)d\theta. 
 The classic Bayesian information criterion (BIC) of a model is an approximation to $-2log(P(Y))$, assuming that the data under the model follows an exponential family distribution.
 
 \begin{equation}
 BIC = -2log(P(Y \vert \hat{\theta})) + d \cdot log(s),
 \end{equation}
 
-\noindent where $\hat{\theta}$ is the maximum-likelihood parameter estimate, $d$ is the dimension of the parameter space, and $s$ is the effective sample size. In the case of the latent space rating model, the MCMC-generated maximum-likelihood estimate may not be completely optimal, the parameter dimension is constrained by prior distributions, and different effective sample sizes are used in estimating various parameters. As an alternative to BIC we consider the BIC for model selection (BICM) of \citet{BICM}.
+\noindent where $\hat{\theta}$ is the maximum-likelihood parameter estimate, $d$ is the dimension of the parameter space, and $s$ is the effective sample size. In the case of the latent space rating model, this is complicated by several factors. The MCMC-generated maximum-likelihood estimate may not be globally optimal, the parameter dimension is constrained by prior distributions, and different effective sample sizes are used in estimating various parameters. As an alternative to BIC we consider the BIC for model selection (BICM) of \citet{BICM}.
 
 \begin{equation}
 BICM = -2\hat{\ell}_{max} + \sum_{k=1}^{K}log(n_k) + (\hat{d} - K)log(n_{K}),
 \end{equation}
 
-\noindent where $K$ is the number of fixed effects in the model. We let $\hat{\ell}_{max} = log(P(Y \vert \hat{\theta}))$, where $\hat{\theta}$ is our highest-likelihood MCMC estimate. Given the consistency in estimates we have found by various methods, the error in that approximation should be small relative to differences between models. We consider the estimate of $\hat{d}$ derived by \citet{BICM}, which draws on the asymptotic distribution
+\noindent where $K$ is the number of fixed effects in the model. We let $\hat{\ell}_{max} = log(P(Y \vert \hat{\theta}))$, where $\hat{\theta}$ is our highest-likelihood MCMC estimate. We consider the estimate of $\hat{d}$ derived by \citet{BICM}, which draws on the asymptotic distribution
 
 \begin{equation}
 \ell_{max} - \ell_t \sim Gamma(\alpha, 1),
 \end{equation}
 
-\noindent where $\ell_t$ is the log likelihood of a draw from the posterior distribution of $\theta$. The variance of this gamma distribution is $\alpha$, which we estimate by $var(\ell_t)$, and thereby estimate
+\noindent where $\ell_t$ is the log likelihood of a draw from the posterior distribution of $\theta$, and $\alpha$ = $d/2$. The variance of this gamma distribution is $\alpha$, which we estimate by $var(\ell_t)$, and thereby estimate
 
 \begin{equation}
 \hat{d} = 2var(\ell_t).
 \end{equation}
 
-\noindent We use the MCMC sample for this estimate, so it is important that it has been thinned enough that the posterior log likelihoods are independent. (This can be verified using the \code{mcmc.diagnostics} function of \pkg{latentnet}.) In addition, we note that the assumed scale parameter implies another estimate of $\alpha$ if we have a pre-existing estimate of $l_{max}$, namely $\alpha = E[l_{max} - l_t]$. This recovers the estimate of parameter dimension introduced by \citet{paramD},    %Note that this is similar to a one half variance formula in Gelman, but that formula has questioned. http://andrewgelman.com/2006/07/06/number_of_param/
+\noindent We use the MCMC sample for this estimate, so it is important that it has been thinned enough that the posterior log likelihoods are independent. (We verify this using the \code{mcmc.diagnostics} function of \pkg{latentnet}.) In addition, we note that the assumed scale parameter implies another estimate of $\alpha$ if we have a pre-existing estimate of $l_{max}$, namely $\alpha = E[l_{max} - l_t]$. This recovers the estimate of parameter dimension introduced by \citet{paramD},    %Note that this is similar to a one half variance formula in Gelman, but that formula has questioned. http://andrewgelman.com/2006/07/06/number_of_param/
 
 \begin{equation}
 p_D = -2*\hat E[l_t - l_{max}] = \hat{D}_{avg}(Y, \theta) - D(Y, \hat{\theta}), %also in gelman
 \end{equation}
 
-\noindent where deviance $D(Y,\theta) = -2log(P(Y \vert \theta))$ and  $\hat{D}_{avg}(Y)$ is calculated by averaging over the MCMC sample. \citet{paramD} use the posterior mean for the point estimate $\hat\theta$, but note that others can be justified. Discrepancy between $\hat{d}$ and $p_D$ reveals the extent to which the asymptotic gamma assumption does not fit the data. This may imply that the scale parameter is not exactly one, though it should be close. Alternately, it may indicate error in our estimate of $l_{max}$ or $var(l_t)$, but if the magnitude of this error is small, as we find in this example, then we can proceed with model selection.
+\noindent where deviance $D(Y,\theta) = -2log(P(Y \vert \theta))$ and  $\hat{D}_{avg}(Y)$ is calculated by averaging over the MCMC sample. \citet{paramD} use the posterior mean as the point estimate $\hat\theta$, but note that others can be justified. Discrepancy between $\hat{d}$ and $p_D$ reveals the extent to which the asymptotic gamma assumption does not fit the data. This may imply that the scale parameter is not exactly one, though it should be close. Alternately, it may indicate error in our estimate of $l_{max}$ or $var(l_t)$, but if the magnitude of the discrepancy error is small, as we find in this example, then we can proceed with model selection.
 
-For the effective sample size, we are primarily concerned with the number of data points used to estimate positions, since our models only differ in the dimension of positions. Although \citet{BICM} based the effective sample size for positions in a binary network on the number of realized edges, in a valued network zero-weight edges are informative, so we use $2(n-1)$. This poses a slight problem because the sender and receiver random effects would logically halve that effective sample size to $n-1$, since they only depend on out- and in-edges respectively. However, the over-penalization that results is consistent across dimensional models, so we can ignore it when comparing models.
+For the effective sample size, we are primarily concerned with the number of data points used to estimate positions, since here our models only differ in the dimension of positions. Although \citet{BICM} based the effective sample size for positions in a binary network on the number of realized edges, in a valued network zero-weight edges are informative, so we use $2(n-1)$. This poses a slight problem because the sender and receiver random effects would logically halve that effective sample size to $n-1$, since they only depend on out- and in-edges respectively. However, the over-penalization that results is consistent across dimensional models, so we can ignore it when comparing models.
 
 % We can use the simulated graph stuff from sim_point_point to establish that the marginal distribution of data under the model is similar to the distribution of data given theta, which is poisson/exponential family?
 
@@ -1882,10 +1885,10 @@ BIC.table = data.frame(row.names = c("0", "1", "2", "3"))
                         -2*(lmax_3)+ 4*(log(n*(n-1))) + (dhat_3 - 4)*log(2*(n-1)))
            
             BIC.table$"$BICM_{p_D}$" = 
-                      c(-2*(lmax_0) + 3*(log(n*(n-1))) + (-2*(pD_0) - 3)*log(2*(n-1)),
-                      -2*(lmax_1) + 4*(log(n*(n-1))) + (-2*(pD_1) - 4)*log(2*(n-1)),
-                      -2*(lmax_2) + 4*(log(n*(n-1))) + (-2*(pD_2) - 4)*log(2*(n-1)),
-                      -2*(lmax_3) + 4*(log(n*(n-1))) + (-2*(pD_3) - 4)*log(2*(n-1)))
+                      c(-2*(lmax_0) + 3*(log(n*(n-1))) + ((pD_0) - 3)*log(2*(n-1)),
+                      -2*(lmax_1) + 4*(log(n*(n-1))) + ((pD_1) - 4)*log(2*(n-1)),
+                      -2*(lmax_2) + 4*(log(n*(n-1))) + ((pD_2) - 4)*log(2*(n-1)),
+                      -2*(lmax_3) + 4*(log(n*(n-1))) + ((pD_3) - 4)*log(2*(n-1)))
                       
            #BIC.table$"$\\hat{SE}_{mcmc}$" = c(SE_0, SE_1, SE_2, SE_3)
            
@@ -1948,15 +1951,13 @@ for (i in 1:length(samp1)) {
 }
 @
 
-Table \ref{BIC.table} shows, from left to right, a traditional BIC estimate with parameter dimension equal to the number of parameters and sample size equal to $n*(n-1)$; BICM using $\hat{d}$; BICM using $p_D$; the $\hat{d}$ and $p_D$ estimates of parameter dimension; and the correlation in ratings from each model with the two-dimensional model as the reference. The two-dimensional model is a major improvement over the zero- and one-dimensional models by all measures. The three-dimensional model is a small improvement over the two-dimensional model. However, the correlation in ratings between the two and three-dimensional models is extremely high (0.9991). These factors combined with the increased difficulty of visualizing three-dimensional estimates leads us to select the two-dimensional model. (Although the error of BICM estimates is not of primary interest here, bootstrap estimates of the standard error in $BICM$ due to MCMC sampling variation show that it is small relative to differences between models.)
+Table \ref{BIC.table} shows, from left to right, a traditional BIC estimate with parameter dimension equal to the number of parameters and sample size equal to $n*(n-1)$; BICM using $\hat{d}$; BICM using $p_D$; the $\hat{d}$ and $p_D$ estimates of parameter dimension; and the correlation in ratings from each model to the two-dimensional model. The two-dimensional model is a major improvement over the zero- and one-dimensional models by all measures. The three-dimensional model is a small improvement over the two-dimensional model. However, the correlation in ratings between the two and three-dimensional models is extremely high (0.9991). These factors combined with the increased difficulty of visualizing three-dimensional estimates leads us to select the two-dimensional model. Although the error of BICM estimates is not of primary interest here, bootstrap estimates of the standard error in $BICM$ due to MCMC sampling variation show that it is small relative to differences between models.
 
-\subsubsection{Model Fit} \label{dim}
+\subsubsection{Model fit} \label{dim}
 
 The latent space and quasi-Stigler models produce roughly equivalent journal rankings, but how well do they model the observed network? We consider elements of the fit of our two-dimensional latent space model in comparison to the quasi-Stigler model.
 
-Figure \ref{fig:residuals} (left) displays model residuals ordered by the value of the underlying edge, i.e. number of citations, for a Poisson sender-receiver model with no latent positions (D = 0), the two-dimensional latent space model (D = 2), and the quasi-Stigler model. We include the zero-dimensional model to help distinguish the impact of modeling edge weights as Poisson from the effect of adding positions. The quasi-Stigler model has the smallest residuals overall ($SD = 2.2$), which we expect since the model is constrained by dyad totals. The two-dimensional latent space model is a bit worse ($SD = 3.7$), but of course much better than the no-position model ($SD = 8.8$). The no-position model is systematically biased, in that edges with lower citation counts are more likely to be overestimated, and heavier edges more likely to be underestimated. This pattern is evident in the other two models, but much less severe. Examining high-value edges underestimated by the two-dimensional model reveals that they are outliers relative to the citation patterns of the underlying journals. They may be a result of the long-tailed distribution of citation counts per article, but we do not have access to the itemized counts to investigate further. There may be additional covariates that we could add to the model to account for these seeming outliers. We also note that by far the highest-valued edge in the network is from \textit{Statistics in Medicine} to \textit{Biometrika}. These journals are related to biological sciences, a field with much higher average citations counts than statistics \citep{if_fraction}. This hints at the importance of a model extension to account for differing activity patterns within journal fields. Although the data for related fields is not currently available for publication, we revisit relevant model extensions in the discussion.
-
-<<residuals, eval = T, cache = T, message =F, warning = F, echo = F, dependson = c("glm"), fig.width = 6, fig.height = 2.5, fig.align="center", results = "hide", fig.cap = 'Comparison of residuals (2160) for models in zero and two dimensions and the quasi-Stigler model. Left: Residuals ordered by value of the corresponding edge. A linear model is fit to each set. Right: Pearson residuals for Poisson models. The highest fitted left out to enhance detail.', fig.pos = 'H'>>=
+<<residuals, eval = T, cache = T, message =F, warning = F, echo = F, dependson = c("glm"), fig.width = 6, fig.height = 2.5, fig.align="center", results = "hide", fig.cap = 'Comparison of 2162 residuals for latent space models in zero and two dimensions and the quasi-Stigler model. Left: Residuals ordered by value of the corresponding edge. A linear model is fit to each set. Right: Pearson residuals for Poisson models plotted against fitted values. The highest fitted value is left out to enhance detail.', fig.pos = 'H'>>=
 
 # g1 (quasi stigler, or quassibinomial glm) ####
 
@@ -2016,7 +2017,8 @@ res_vs_edge = ggplot(R, aes(x = edgeweight, y = residual, color = model)) +
         legend.key = element_rect(fill = "transparent"),
         legend.background=element_rect(fill="transparent"),
         legend.direction="horizontal",
-        legend.title = element_blank()) +
+        legend.title = element_blank(),
+        plot.title = element_text(size = 12)) +
   xlab("edge value") +
   ggtitle("Residuals vs. Edge Value") #+ facet_wrap(~model, scales = "free_x")
 
@@ -2038,7 +2040,8 @@ res_vs_fitted = ggplot(data1) +
    geom_point(aes(color = hue_pal()(3)[1], x = fitted2, y = pearson2),
            size = .5, alpha = .5, inherit.aes = F) +
   theme_bw() + ggtitle("Residuals vs. Fitted") +
-  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 12)) +
   ylab("Pearson residual") + xlab("fitted value") + xlim(0,150) +
   scale_color_manual(values = c(hue_pal()(3)[2]))
 
@@ -2066,7 +2069,9 @@ ggplot(Y, aes(x = citations, y = journal)) + geom_joy() + xlim(0, 50)
 cowplot::plot_grid(sender_dist, receiver_dist)
 @
 
-The right-hand plot of Figure \ref{fig:residuals} displays Pearson residuals against fitted values for the two-dimensional model. There is heightened variation where fitted values are close to zero and residuals must be negative. Although these mostly correspond to small absolute differences, the standardized scale reveals a lack of fit. To acccount for this in future implementations we could add a small constant to the citiation data matrix to stabilize the model for low counts. The underlying assumption is that all statistics journals in the network have at least a small chance of exchanging citations. Outside the near-zero area, the model spread appears roughly constant given the amount of data across fitted values, and does not appear overdispersed.
+Figure \ref{fig:residuals} (left) displays model residuals ordered by the value of the underlying edge, i.e. number of citations, for a Poisson sender-receiver model with no latent positions (D = 0), the two-dimensional latent space model (D = 2), and the quasi-Stigler model. We include the zero-dimensional model to help distinguish the impact of modelling edge weights as Poisson from the effect of adding positions. The quasi-Stigler model has the smallest residuals overall ($SD = 2.2$), which we expect since the model is constrained by dyad totals. The two-dimensional latent space model is a bit worse ($SD = 3.7$), but of course much better than the no-position model ($SD = 8.8$). The no-position model is systematically biased, in that edges with lower citation counts are more likely to be overestimated, and heavier edges more likely to be underestimated. This pattern is evident in the other two models, but much less severe. Examining high-value edges underestimated by the two-dimensional model reveals that they are outliers relative to the citation patterns of the underlying journals. This may be a result of the long-tailed distribution of citation counts per article, but we do not have access to the itemized counts to investigate. There may be additional covariates that we could add to the model to account for these seeming outliers. We also note that by far the highest-valued edge in the network is from \textit{Statistics in Medicine} to \textit{Biometrika}. These journals are related to biological sciences, a field with much higher average citations counts than statistics \citep{if_fraction}. This hints at the importance of a model extension to account for differing activity patterns within journal fields. Although the data for related fields is not currently available for publication, we revisit relevant model extensions in the discussion.
+
+The right-hand plot of Figure \ref{fig:residuals} displays Pearson residuals against fitted values for the two-dimensional model. There is heightened variation where fitted values are close to zero and residuals must be negative. Although these mostly correspond to small absolute differences, the standardized scale reveals some lack of fit. To account for this in future implementations we may add a small constant to the citation data matrix to stabilize the model for low counts. This is reasonable, since we presume that all statistics journals in the network have at least a small chance of exchanging citations. Outside the near-zero area, the model spread appears roughly constant given the amount of data across fitted values, and the model does not appear overdispersed.
 
 %3). Structure, reciprocity 
 
@@ -2076,7 +2081,7 @@ Although dyad-total constraints in the quasi-Stigler model lower the residuals, 
 reciprocity(Y) = \frac{\sum_{i \neq j}y_{ij}*y_{ji}}{\sum_{i \neq j}(\frac{y_{ij}+y_{ji}}{2})^2}.
 \end{equation}
 
-\noindent The value of the statistic ranges from zero to one, achieving the maximum if the network is symmetric. The denominator controls for the influence of variation in the dyad totals. We also consider an unnormalized version with the denominator removed. Figure \ref{fig:structure_reciprocity_plot} shows simulated reciprocity statistics based on a MKL point estimate for the two-dimensional latent space model; the posterior parameter distribution of the two-dimensional latent space model; and the point estimate for the quasi-Stigler model. To simulate networks from the quasi-Stigler model we use a beta-binomial approximation with mean and variance matching the overdispersed binomial. The left panel shows reciprocity while the right panel shows unnormalized values. 
+\noindent The value of the statistic ranges from zero to one, achieving the maximum if the network is symmetric. The denominator controls for the influence of variation in the dyad totals. We also consider an unnormalized version with the denominator removed. Figure \ref{fig:structure_reciprocity_plot} shows distributions of reciprocity statistics, each based on 5000 simulated networks. They are simulated from an MKL point estimate for the two-dimensional latent space model; the posterior parameter distribution of the two-dimensional latent space model; and the point estimate for the quasi-Stigler model. To simulate networks from the quasi-Stigler model we use a beta-binomial approximation with mean and variance matching the overdispersed binomial. The left panel shows reciprocity while the right panel shows unnormalized values. 
 
 <<structure_reciprocity, eval = T, echo = F, cache = T, message =F, warning = F, results = 'hide', fig.height = 4>>=
 
@@ -2165,7 +2170,8 @@ recplot1.norm = ggplot(rec.data, aes(x = normalized_reciprocity, color = model))
   geom_text(x=Q.norm, label="observed", y = 500, colour="gray", angle=90, vjust = -.2, size=3) +
   geom_hline(yintercept = 0, col = "gray", size = .3) +
   theme_bw() + 
-  theme(legend.position = "none") +
+  theme(legend.position = "none",
+        plot.title = element_text(size = 12)) +
   scale_color_manual(values = c(hue_pal()(3)[2], hue_pal()(8)[8], hue_pal()(3)[3])) +
   ggtitle("Reciprocity") + labs(x = NULL) 
 
@@ -2180,15 +2186,16 @@ recplot1 = ggplot(rec.data, aes(x = reciprocity, color = model)) +
   geom_hline(yintercept = 0, col = "gray", size = .3) +
   theme_bw() +
   theme(axis.text.x = element_text(size = 8),
-        legend.position = c(.8,.9), legend.text = element_text(size = 7),
+        legend.position = c(.8,.8), legend.text = element_text(size = 7),
         legend.key = element_rect(fill = "transparent"),
         legend.background=element_rect(fill="transparent"),
-        legend.title = element_blank()) +
+        legend.title = element_blank(),
+        plot.title = element_text(size = 12)) +
   scale_color_manual(values = c(hue_pal()(3)[2], hue_pal()(8)[8], hue_pal()(3)[3])) +
   ggtitle("Unnormalized Reciprocity") +  labs(x = NULL)
 
 
-cowplot::plot_grid(recplot1.norm, recplot1, rel_widths = c(.8, 1), nrow = 1)
+cowplot::plot_grid(recplot1.norm, recplot1, rel_widths = c(.9, 1), nrow = 1)
 
 @
 
@@ -2244,9 +2251,9 @@ c(sd(tmp2), sd(tmp2mkl), sd(tmp.qs), sd(tmp2.norm), sd(tmp2mkl.norm), sd(tmp.qs.
 
 @
 
-\subsubsection{Comparison of Estimation Methods} \label{estimeval}
+\subsubsection{Comparison of estimation methods} \label{estimeval}
 
-We now turn to the comparison of estimation methods for the latent space model. We illustrate that quasi-Netwon optimization returns item rankings and positional estimates nearly identical to MCMC results in much less time. 
+We now turn to the comparison of estimation methods for the latent space model. We illustrate that quasi-Netwon optimization returns ratings nearly identical to MCMC results in much less time. 
 
 <<compare_latent_models, eval = T, echo = F, cache=T, results='asis', cache.comments = FALSE, warning= FALSE, dependson = c("latent_sr2_init_r", "latent_sr2", "latent_qn")>>=
 
@@ -2261,10 +2268,10 @@ results.table$"$l(Y|\\hat{\\theta})$" = as.character(round(
                                 llik(latent.srp2.init.r$mkl, Y = t(Cmatrix), est = "Y"))))
 results.table$"$l(\\hat{\\theta})$" = as.character(round(
                                 c(llik(latent.srp2.init.r$burnin.start, Y = t(Cmatrix), est = "theta"),
-                                with(latent.srp2$mcmc.mle, llik(latent.srp2$mkl,
+                                with(latent.srp2$mcmc.pmode, llik(latent.srp2$mkl,
                                      Y = t(Cmatrix), sender.var = sender.var,
                                      receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
-                                with(latent.srp2.init.r$mcmc.mle, llik(latent.srp2.init.r$mkl,
+                                with(latent.srp2.init.r$pmode, llik(latent.srp2.init.r$mkl,
                                      Y = t(Cmatrix), sender.var = sender.var,
                                      receiver.var = receiver.var, Z.var = Z.var, est = "theta")))))
 results.table$"$l(\\hat{\\theta}|Y)$" = as.character(as.numeric(results.table$"$l(Y|\\hat{\\theta})$") + as.numeric(results.table$"$l(\\hat{\\theta})$"))
@@ -2275,8 +2282,9 @@ results.table$"Rating Cor." = c(cor(latent2, latent.srp2.init.r$burnin.start$rec
                                cor(latent2, latent.srp2$mkl$receiver - latent.srp2$mkl$sender),
                                cor(latent2, latent.srp2.init.r$mkl$receiver - 
                                             latent.srp2.init.r$mkl$sender))
+                               #vs.mle cor(latent2, latent.srp2.init.r$mle$receiver - latent.srp2.init.r$mle$sender)
 
-print(xtable(results.table, caption = "Estimation methods. The $ell$ function in the column titles indicates the log of the probability.", digits = 4, label = "results.table"), caption.placement = "top", sanitize.text.function=function(x){x})
+print(xtable(results.table, caption = "Comparison of estimation methods. The $\\ell$ function is the log of the probability.", digits = 4, label = "results.table"), caption.placement = "top", sanitize.text.function=function(x){x})
 
 # MCMC diagnostics ####
 
@@ -2291,28 +2299,20 @@ print(xtable(results.table, caption = "Estimation methods. The $ell$ function in
 # llik(latent.srp2.init.r$mcmc.pmode, Y = t(Cmatrix), est = est)
 # with(latent.srp2.init.r.bfgs$mcmc.mle, llik(latent.srp2.init.r.bfgs$mkl, Y = t(Cmatrix), sender.var = sender.var, receiver.var = receiver.var,  Z.var = Z.var, est = est))
 #llik(latent.srp2.init.r.bfgs$mcmc.mle, Y = t(Cmatrix), est = est)
-#llik(latent.srp2.init.r.bfgs$mcmc.pmode, Y = t(Cmatrix), est = est)
-
-#same as sann
-#with(latent.srp2.init.r.bfgs, llik(t(Cmatrix), mkl$sender, mkl$receiver, mkl$beta, mkl$Z,  mcmc.mle$sender.var, mcmc.mle$receiver.var, mcmc.mle$Z.var,est = est))
-
-# best mcmc.mle estimate consistently a little workse than mkl
-  # with(latent.srp2$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z,sender.var, receiver.var, Z.var, est = est))
-  # with(latent.srp2.init.r.sann$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
-  # with(latent.srp2.init.r.bfgs$mcmc.mle, llik(t(Cmatrix), sender, receiver, beta, Z, sender.var, receiver.var, Z.var, est = est))
- # even worse with #(latent.srp2, llik(Y, mkl$sender, mkl$receiver, mkl$beta, mkl$Z, sum(mkl$sender^2 + v_a*s2_a^2) / (N + 2 + v_a), sum(mkl$receiver^2 + v_b*s2_b^2) / (N + 2 + v_b), sum(as.vector(mkl$Z)^2 + v_z*s2_z^2) / (N*d + 2 + v_z), est = "MAP"))
+#llik(latent.srp2.init.r.bfgs$mcmc.pmode, Y = t(Cmatrix), est = est)#same as sann
 
 # Compare positions (with or without procrustes) ####
 #plot(latent.srp2.init.r$mkl$Z, col = col2, pch = 16)
 #plot(vegan::procrustes(latent.srp2.init.r$mkl$Z, latent.srp2.init.r$burnin.start$Z)$Yrot, col = col2, pch = 16)
 
+
 @
 
-Table \ref{results.table} compares the results for the two-dimensional Poisson latent space model by three different estimations techniques: 1) The limited-memory bounded quasi-Newton method implemented by the \code{optim} (QN L-BFGS-B). 2) MCMC estimation as implemented by \pkg{latentnet}; and 3) MCMC as in method two but with random initialization of sender and receiver coefficients and MDS initial positions scaled so that the maximum coordinate size is one. Note that this initialization is also employed for quasi-Netwon estimation. For MCMC chains we allowed a burn-in period of $500000$, and collected a sample of size $5000$ by storing every $500th$ draw. We checked for convergence and appropriate MCMC interval and burn-in values using the \code{mcmc.diagnostics} function of \pkg{latentnet}. The MCMC method of row two seems to converge based on diagnostic plots, but given given the higher-probably estimate resulting from a different initialization method, we see that it has in fact converged to a local maximum.
+Table \ref{results.table} compares results for the two-dimensional latent space rating model by three different estimations techniques: 1) The limited-memory bounded quasi-Newton method as implemented by \code{optim} (QN L-BFGS-B). 2) MCMC estimation as implemented by \pkg{latentnet}; and 3) MCMC estimation as in method two, but with random initialization of sender and receiver coefficients and MDS initial positions scaled so that the maximum coordinate size is one. (We henceforth refer to this as the ``random'' initialization method.) Note that this initialization is also employed for the quasi-Netwon estimate. For MCMC chains we allowed a burn-in period of $500000$, and collected a sample of size $5000$ by storing every $500th$ draw. We checked for convergence and appropriate MCMC interval and burn-in values using the \code{mcmc.diagnostics} function of \pkg{latentnet}. The MCMC method of row two seems to converge based on diagnostic plots, but given the higher-probably estimate resulting from a different initialization method, we see that it has in fact converged to a local maximum.
 
-Timing of computations was in R 3.3.2 with a MacBookPro, 2.6 GHz Intel Core i5 processor with 8 GB 1600 MHz DDR3 memory without. The ``code'' column indicates if the main operations were performed in \proglang{R} or \proglang{C}. Although not employed here, \pkg{latentnet} does allow for parallel processing of multiple MCMC chains. The time estimates should be considered ballpark for each method, as the number of iterations for the quasi-Netwon methods and control parameters for the MCMC could be augmented to achieve some speed-up. However, the process of optimizing these would mostly likely negate the time benefits.
+Timing of computations was in R 3.3.2 with a MacBookPro, 2.6 GHz Intel Core i5 processor with 8 GB 1600 MHz DDR3 memory. Although not employed here, \pkg{latentnet} does allow for parallel processing of multiple MCMC chains. The time estimates should be considered ballpark for each method, as the number of iterations for the quasi-Netwon methods and control parameters for the MCMC could be augmented to achieve some speed-up. However, the process of optimizing these would mostly likely negate the time benefits.
 
-We present MKL estimates from MCMC methods because they have higher posterior and graph likelihood than other point estimates, such as the posterior mode. Results in previous sections have all drawn on the MKL estimates from the MCMC estimation with random initialization (row three). The MCMC methods are clearly much slower than the quasi-Newton methods due to the number of iterations required, although they have the advantage of returning a posterior sample. The much faster estimates from the quasi-Newton methods are very highly correlated with these results (column five).
+We present MKL estimates from MCMC methods because they have higher posterior and graph likelihood than other point estimates, such as the posterior mode. To calculate $\ell(\theta)$ for these estimates, where $\ell$ is the log of the probability function, we use the random effect variances estimated by the MCMC posterior mode. Results in previous sections have all drawn on the MKL estimates from MCMC estimation with random initialization (row three), because they have even higher probably than other MKL estimates. The MCMC methods are clearly much slower than the quasi-Newton methods due to the number of iterations required, although they have the advantage of returning a posterior sample. The much faster estimates from the quasi-Newton methods are very highly correlated with these results (column five), and the log likelihood is only a tiny bit worse.
 
 <<journal_simulation_study_data_optim, eval = T, echo = F, warning = F, message = F, cache = T, results = "hide">>=
 
@@ -2341,7 +2341,7 @@ for(i in 1:trials) {
 t2.fits.o = Sys.time()
 @
 
-<<journal_simulation_study_plots, eval = T, echo = F, cache = T, warning = F, fig.width = 6, fig.height = 5, fig.cap = 'Distribution of differences in ratings (receiver - sender) and total actor parameters (sender + receiver + intercept) based on 100 simulations' , dependson = c("journal_simulation_study_data")>>=
+<<journal_simulation_study_plots, eval = T, echo = F, cache = T, warning = F, fig.width = 6, fig.height = 5, fig.cap = 'Distribution of differences in ratings (receiver - sender) and total actor parameters (sender + receiver + intercept) from the data-generating model based on 100 simulations' , dependson = c("journal_simulation_study_data")>>=
 
 # Plot distributions of differences in ratings and sum of actor effects + intercept
 library(ggplot2)
@@ -2361,6 +2361,7 @@ data.o = data.frame(journal = rep(rownames(Cmatrix), length(fits.o)),
 # 1. Receiver - sender to show ratings changes ####
 fits.o.rs = ggplot(data.o, aes(x = journal, y = receiver_diff - sender_diff, color = journal)) +
   geom_boxplot() +
+  theme_bw() +
   theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
         plot.title = element_text(size = 12)) +
   geom_abline(slope = 0, intercept = 0, col = "gray") + 
@@ -2370,6 +2371,7 @@ fits.o.rs = ggplot(data.o, aes(x = journal, y = receiver_diff - sender_diff, col
 # 2. Sender + receiver + beta to show variation with positions ####
 fits.o.rsb = ggplot(data.o, aes(x = journal, y = sender_diff_raw + receiver_diff_raw + beta_diff, color = journal)) +
   geom_boxplot() +
+  theme_bw() +
   theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
         plot.title = element_text(size = 12)) +
   geom_abline(slope = 0, intercept = 0, col = "gray") +
@@ -2392,7 +2394,6 @@ data.o.mle = data.frame(journal = rep(rownames(Cmatrix), length(fits.o)),
 fits.o.rs.mle = ggplot(data.o.mle, aes(x = journal, y = receiver_diff - sender_diff, color = journal)) +
   geom_boxplot() +
   theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
-  theme_bw()+
   geom_abline(slope = 0, intercept = 0, col = "gray") + 
   ggtitle("Difference in rating") +
   xlab(NULL) + ylab(NULL)
@@ -2410,7 +2411,9 @@ fits.o.rsb.mle = ggplot(data.o.mle, aes(x = journal, y = sender_diff + receiver_
 cowplot::plot_grid(fits.o.rs, fits.o.rsb, nrow = 2)
 @
 
-<< poisson_glm_offset, eval = T, echo = F, warning = F, message = F, fig.keep = "none", cache = T>>=
+To more formally examine the accuracy of quasi-Newton estimation we conduct a simulation study. We generate 100 simulated citation networks from the best MKL point estimate and fit each by QN L-BFGS-B. We then calculate the differences in ratings (sender minus receiver coefficient) and total actor parameters (sender plus receiver coefficient plus intercept) between the data generating model and the estimate from each simulation. Although the zero-mean prior reduces the non-identifiability of the random effects, with diffuse priors it is not entirely eliminated in practice. To account for this when calculating differences in ratings between fits, we center the sender and receiver estimates to mean zero. The results are presented in Figure \ref{fig:journal_simulation_study_plots}. The top panel shows that the differences in ratings are all concentrated near zero, indicating that QN L-BFGS-B does reliably recreate the ``true'' ratings in this case. Slightly larger variances occur for journals such as StataJ which have fewer non-zero edges. The bottom panel shows the differences in total actor parameters. Deviations from zero in this panel indicate changes in positions relative to the data-generating model. Journals estimated to be closer on aggregate to other journals compensate with smaller random effects, and appear below the x-axis. Three journals lie significantly below the x-axis. We can see in the network visualization that these three are located in the periphery of the network space. Thus, there is a linear range in which their position is nearly identified with the total of their sender and receiver coefficients. This is not a problem with the estimation method but stems from underlying uncertainty in the model. However, it does not affect our estimated rankings, as we see in the top panel, nor the overall configuration of the network. That said, we must recognize that, in general, estimated positions of peripheral nodes may be much more variable than central ones.
+
+<< poisson_glm_offset, eval = T, echo = F, warning = F, message = F, fig.keep = "none", cache = T, results = "hide">>=
 
 # To estimate uncertainty in latent position model based on quasi-Newton estimate 
 
@@ -2453,11 +2456,11 @@ plot(sd2, sd2g)
 range(sd2)
 range(sd2g)
 range(sd2 - sd2g)
+mean(sd2 - sd2g)
 @
 
-To more formally examine the accuracy of quasi-Newton estimation we conduct a simulation study. We generate 100 simulated citation networks from the MKL point estimate and fit each by QN L-BFGS-B. We then compare the differences in ratings (sender minus receiver coefficient) and total actor parameters (sender plus receiver coefficient plus intercept) between the data generating model and the simulation estimate. Although the zero-mean prior reduces the non-identificability of the random effects, in practice with diffuse priors there is slight fluctuation. To account for this when calculating differences in ratings, we center the sender and receiver estimates to mean zero. The results are presented in Figure \ref{journal_simulation_study_plots}. The top panel shows that the differences in ratings are all concentrated near zero, indicating that QN L-BFGS-B does reliably recreate the ``true'' ratings in this case. Slighlty larger variances occur for journals such StataJ which have fewer non-zero edges. The bottom panel shows the differences in total actor parameters. Deviations from zero in this panel indicate changes in positions relative to the data-generating model. Journals estimated to be closer on aggregate to other journals compensate with smaller random effects. Three journals are estimated to be significantly closer to the rest of the network. We observe in the network visualization they each is in the periphery of the network. Thus, there is a linear range for which their position is nearly identified with the total of their sender and reciever coefficients. This is not a problem with the estimation method but stems from underlying uncertainty model. However, it does not affect our estimated rankings, as we see in the top panel, not the overall interpretation of the network. That said, it we must remember that the positions of peripheral nodes are more variable than central ones. 
-
-Although the QN L-BFGS-B do not return a sample of the posterior distribution of $\theta$ like MCMC estimation, we can still estimate the variance in ratings. One method for doing this is to fit a Poisson GLM to the data matrix with estimated positions as an offset, i.e the distance term in \ref{eq3} is treated as a constant. We implemented such a model in this case and found similar estimates of ratings uncertainty to those derived from the MCMC sample. The estimated standard deviations range from 0.22 to 0.29, with differences from the MCMC estimates ranging from about 0 to 0.013. 
+A drawback to quasi-Newton estimation is that it does not generate a sample of the posterior distribution which which to estimate MKL positions or the variance of ratings. However, we can still approximate the ratings uncertainty. One way to do this is to fit a Poisson GLM to the data matrix with estimated positions as an offset, i.e the distance term in Equation \ref{eq3} is treated as a constant. We implement such a model and find similar estimates of ratings uncertainty to those derived from the MCMC sample, although we do lose one journal comparison due to a model-fitting constraint. The estimated standard deviations range from 0.22 to 0.28, compared to the MCMC range of 0.22 to 0.29, with differences having mean 0.002 and maximum 0.013. Not only does this provide an estimate of rating uncertainty, it also confirms that there is minimal dependence between positional parameters and ratings estimates, as was alluded to by Figure \ref{fig:journal_simulation_study_plots}.
+%The dependence between ratings and positions in a valued network is likely to be low. Roughly, the positions model symmetric effects, while the ratings model directed effects, and the edge values help us to distinguish them. 
 
 <<hyperpriors, eval = T, cache = T, echo = F, results = 'hide', warning= F, message = F, fig.keep='none', dependson= c("llik_and_latent_qn")>>=
 
@@ -2589,6 +2592,7 @@ t2.fits.oh = Sys.time()
 
 <<journal_simulation_study_plots_h, eval = F, echo = F, warning = F, dependson = c("journal_simulation_study_data", "journal_simulation_study_data_h", cache = T)>>=
 
+library(ggplot2)
 # Not a big difference with these hyperprior adjustments. MAP estimates have slight shrinkage, maybe .1 total,
 # 
 # MAP - adjusted hyperpriors ####
@@ -2608,7 +2612,7 @@ fits.oh.rs = ggplot(data.oh, aes(x = journal, y = receiver_diff - sender_diff, c
   geom_boxplot() +
   theme(legend.position = "none", axis.text.x = element_text(angle = 90, hjust = 1)) +
   geom_abline(slope = 0, intercept = 0, col = "gray") + 
-  ggtitle("Difference in rating") +
+  ggtitle("Difference in rating") + ylim(-1,1) +
   xlab(NULL) + ylab(NULL)
 
 # 2. Sender + receiver + beta to show variation with positions ####
@@ -2619,36 +2623,31 @@ fits.oh.rsb = ggplot(data.oh, aes(x = journal, y = sender_diff + receiver_diff +
   ggtitle("Difference in total") +
   xlab(NULL) + ylab(NULL)
 
+cowplot::plot_grid(fits.oh.rs, fits.oh.rsb, nrow = 2)
+
 @
 
-As with any Bayesian model we must consider the sensitivity of estimates to the assumptions contained in the prior structure and hyperprior values. However, we find such a strong correlation (0.999) between the rating scores resulting from the MLE and MKL estimates that there is little reason to suspect undue influence from the priors. Still, we consider shrinking the prior intercept variance to one, and adjustments to the hyperprior degrees of freedom and variance. These adjustments narrow the prior distributions on variance parameters to more realistic ranges based on previous results. The middle 90 percent intervals drop to roughly $[0.2, 1.8]$ instead of $[0.4, 8.5]$ for sender and receiver variances, and $[0.9, 3.2]$ instead of $[2.9, 20]$ for position variance. The impact on the results is trivial. The updated estimates of scores and their variances barely change from the previous estimates (correlation $> 0.99$).
+As with any Bayesian model we must consider the sensitivity of estimates to the assumptions contained in the prior structure and hyperprior values. The near-identical ratings between MLE and MKL estimates suggest that the diffuse priors do not impact the ratings. Still, we fit a model with adjustments to the hyperprior degrees of freedom and variance which narrow the prior variance distributions to more realistic ranges based on previous results. 
+%The middle 90 percent intervals drop to roughly $[0.2, 1.8]$ instead of $[0.4, 8.5]$ for sender and receiver variances, and $[0.9, 3.2]$ instead of $[2.9, 20]$ for position variance.
+The effect on the results is trivial, both in the ratings and their standard errors. In some cases it may be valuable to limit the spread of position estimates with stronger priors, but unless they restrict beyond likely observable ranges the impact on ratings should be minimal.  %cor (.9999, .9960)
+
+%%The average computational journal as categorized by \citet{varinetal} has 419 out-citation in the network while the average ecological journal has only 115. A covariate could be added to the model to augment the expected counts within or between subfields. The value of journals that cite heavily outside of statistics, such as the \textit{Stata Journal} which cites many economic journals, could also be downweighted.
 
 
-%If data for related fields such as economics and applied math becomes available (which it is not yet), we could employ such a covariate strategy between fields, or the clustering model of \citet{handcock07} if the network structure allows.  % In the next application we fit a latent space model to movie data that spans genres and different levels of connectivity.
-%%The average computational journal as categorized by \citet{varinetal} has 419 out-citation in the network while the average ecological journal has only 115. A covariate could be added to the model to augment the expected counts within or between subfields.
-%The value of journals that cite heavily outside of statistics, such as the \textit{Stata Journal} which cites many economic journals, could also be downweighted.
+\section{Movie rating and genre identification}\label{Example2}
 
-
-\section{Movie Rating and Genre Identification}\label{Example2}
-
-In this section we apply latent space rating to a set of films with viewer-supplied star ratings. Film rating systems based on viewer ratings are biased by the fact that viewers do not choose movies to rate randomly, and they may skew high or low in their ratings. In addition, average ratings obscure the information provided by the volume of ratings for different films. The latent space rating method efficiently addresses those challenges. The concomitant visualizations aid in genre detection and enhance our ability to explore and compare related films.  Through a dynamic network plot we increase the amount of data we can present. Movie ratings are extremely subjective, so without knowing detailed individual preferences the ability to explore a network of films may be more useful than finding ``correct'' ratings. We compare our results to user star averages. 
-
-%See full code in movie_example.R
-
-%1M Benchmark Data Set
-%http://files.grouplens.org/datasets/movielens/ml-1m-README.txt
-%Permalink: http://grouplens.org/datasets/movielens/1m/
+In this section we apply latent space rating to a set of films with viewer-supplied star ratings. Film rating systems based on viewer ratings are biased by the fact that viewers do not choose movies to rate randomly, and they may skew high or low in their ratings. In addition, average ratings obscure the information provided by the volume of ratings for different films. The latent space rating method efficiently addresses those challenges. The concomitant visualizations aid in genre detection and enhance our ability to explore and compare related films.  Through a dynamic network plot we increase the amount of data we can present. Movie ratings are extremely subjective, so without knowing detailed individual preferences the ability to explore a network of films may be more useful than finding ``correct'' ratings. 
 
 \subsection{Data}\label{Data2}
 
-Our data came from the MovieLens data set \citep{movielens}, collected by the GroupLens Research Project at the University of Minnesota. It consisted of about one million ratings of 3,952 movies from approximately 6,000 users who joined MovieLens in 2000. The data were released in 2003. Ratings were on a one-to-five integer scale with five being the best. Each included user supplied at least 20 ratings.
+Our data came from the MovieLens data set \citep{movielens}, collected by the GroupLens Research Project at the University of Minnesota. It consisted of about one million ratings of 3,952 movies from approximately 6,000 users who joined MovieLens in 2000. The data were released in 2003. Ratings were on a one-to-five integer (star) scale with five being the best. Each included user supplied at least 20 ratings.
 
 To convert the data into a network format we aggregated differences in individual users' ratings to form a $3952 \times 3952$ ratings-difference matrix. To be explicit, entry $i, j$ in the matrix represented the sum of positive values of $rating(j) - rating(i)$ over users who rated both movies. (If $rating(i) > rating(j)$ the difference was added to entry $j,i$.) For example, if a user prefers movie $j$ to $i$ by one point, then one is added to entry $i, j$: $i$ ``sends'' a point to $j$. The corresponding network is positive-valued and directed. 
-%note the data isn't quite coints, as the differences range between 1 and 4, but most are 1 or 2. Overdispersed?
+%note the data isn't quite counts, as the differences range between 1 and 4, but most are 1 or 2. Overdispersed?
 
-To illustrate certain points without too much computational burden we restricted ourselves to a subset of the MovieLens data, retaining only movies assigned genre ``Action'', ``Crime'', ``Western'' or some combination therein. (Only two of the possible combinations are present in the data.) We removed a small number of isolates before modeling. The resulting network has 128 nodes and 11,393 edges.
+To illustrate certain points without too much computational burden we restricted ourselves to a subset of the MovieLens data, retaining only movies assigned genre ``Action'', ``Crime'', ``Western'' or some combination therein. (Only two of the possible combinations are present in the data.) We removed a small number of isolates before modelling. The resulting network has 128 nodes and 11,393 edges.
 
-\subsection{Latent Space Model}\label{Model2}
+\subsection{Latent space model}\label{Model2}
 
 %full movie net is saved as movie_net.rds
 <<r movie_data, eval = T, echo = F, cache = T>>=
@@ -2689,47 +2688,6 @@ t2.acw2b = Sys.time()
 @
 
 %even with a very long burning (5mill, took about 6hrs with interval 500, sample 10000) the final map only increases by a few over initial direct optimization
-
-<<r movie_model_qn, cache = T, eval = T, echo = F, results = "hide", fig.keep = "none">>=
-
-N = nrow(acw_mat)
-
-#Default Hyperpriors: ####
-set.seed(1)
-t1.acw.qn = Sys.time()
-acw.qn = lsqn(acw_mat, runs = 100, tol = .01, Z.init = "rnorm")
-t2.acw.qn = Sys.time()
-range(acw.qn$map$diff_Z); range(acw.qn$map$diff_Z2); acw.qn$map$llik #471435.1
-
-#Adjust Hyperpriors: ####
-set.seed(5)
-t1.acw.qn.h = Sys.time()
-acw.qn.h = lsqn(acw_mat, runs = 100, tol = .01, Z.init = "rnorm",
-              v_a = 6, v_b  = 6, #default 3 
-              v_z = sqrt(N)/4,  #default sqrt(N)
-              s2_a = 1, s2_b = 1, #default 1
-              s2_z = 1, #default N/8 ** shrink sigma_z range
-              sigma2_B = 3) #default 9)
-t2.acw.qn.h = Sys.time()
-#quantile(rinvchisq(100000, 3, 1), probs = c(0.05, .5, .95)) #.8, 2
-#quantile(rinvchisq(100000, sqrt(N)/4, 1), probs = c(0.05, .5, .95)) #1.3 
-range(acw.qn.h$map$diff_Z); range(acw.qn.h$map$diff_Z2); acw.qn.h$map$llik 
-
-# Evaluate
-est = "MAP"
-llik(acw.qn$map, Y = acw_mat, est = est)
-llik(acw.qn.h$map, Y = acw_mat, est = est)
-llik(latent_acw2$mcmc.mle, Y = acw_mat, est = est)
-llik(latent_acw2$mkl, Y = acw_mat, est = est)
-
-xlim = c(-4,4); 
-plot(acw.qn$map$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
-plot(acw.qn.h$map$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
-plot(latent_acw2$mkl$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
-plot(latent_acw2$mcmc.mle$Z, col = as.factor(movie_net_acw_full%v%"genres"), pch = 16, xlim = xlim)
-
-
-@
 
 <<r movie_model_r, eval = T, echo = F, results = 'hide', highlight = F, cache = T, dependson = c("movie_data"), warning = F>>=
 
@@ -2830,69 +2788,64 @@ library(latentnet)
 
 @
 
-By modeling the network of differences in ratings we capture the tendency for a movie to be frequently and consistently rated above movies that draw an overlapping audience. As above, we apply the latent space Poisson model in two dimensions to facilitate visualization. Results are presented in Table \ref{movie.table}. The methods presented in the first four rows are the same as in Table \ref{results.table}. The MKL estimates are again are the best of the estimates produced by the MCMC estimation. For comparison, we include in rows five and six the MCMC MLE and MCMC posterior mode, the maximum likelihood and maximum posterior probability sample iterations. Although the fit from MCMC estimation is not sensitive to initialization method in this example, %default, random, and quasi-Newton initialization all about the same
-the time is somewhat affected. In addition, the bounded quasi-Netwon method (row two) achieves better results in less time (about two minutes instead of ten) when using the same initialization as  our quasi-Netwon method.
+By modelling the network of differences in ratings we capture the tendency for a movie to be frequently and consistently rated above movies that draw an overlapping audience. We apply the latent space Poisson model in two dimensions to facilitate visualization, which is of greater interest in this application than ratings precision. Results are presented in Table \ref{movie.table}. The methods presented in the first three rows are the same as in Table \ref{results.table}. The MCMC sampling parameters are also the same as above. We tried increasing them for this larger network, but found it not to be necessary. The MKL estimates are again the best of the estimates produced by the MCMC estimation. For comparison, we include in rows four and five the MLE and posterior mode estimated from the MCMC sample. Although the fit from MCMC estimation is not sensitive to initialization method in this example, %default, random, and quasi-Newton initialization all about the same
+the time is somewhat affected. In addition, the quasi-Netwon method achieves better results in less time, about two minutes instead of ten, when using random initialization.
 
-As above we consider adjustments to the hyperpriors that narrow the range of prior variance distributions and find the impact on ratings to be trivial (row 7). However, the hyperprior adjustments do benefit the speed of fit and the visualization, by limiting the amount that very low-connectivity nodes drift from the rest. These results are subsequently used for visualization and analysis. For our our quasi-Newton method the use of more restrictive priors improves algorithm performance even when the output is evaluated on the scale of more diffuse priors, so this estimate is show in row one of the table. The calculations in columns three and four of Table \ref{movie.table} assume consistent diffuse priors.
+As above we consider adjustments to the hyperpriors that narrow the range of prior variance distributions and find the impact on ratings to be trivial (row 6). However, the hyperprior adjustments do benefit the visualization by limiting the amount that very low-connectivity nodes drift from the rest. These results are subsequently used for visualization and clustering analysis. For consistency, the calculations in columns three and four of Table \ref{movie.table} all assume the more diffuse priors.
 
 <<r movie_table, echo = F, results = "asis", dependson = c("movie_model", "movie_model_r", "movie_model_qn", "movie_model_h")>>=
 library(xtable)
 
-movie.table = data.frame(row.names = c("quasi-Newton",
-                                       "optim (L-BFGS-B)",
+movie.table = data.frame(row.names = c("QN (L-BFGS-B)",
                                        "MCMC (MKL)",
-                                       "MCMC (MLE)",
-                                       "MCMC (P.mode)",
                                        "MCMC.init.r (MKL)",
+                                       "MCMC.init.r (MLE)",
+                                       "MCMC.init.r (P.mode)",
                                        "MCMC.h (MKL)"))
-movie.table$"Time (min)" = c(as.character(round(difftime(t2.acw.qn.h, t1.acw.qn.h, units = "mins"), 1)), "2",  
-                             as.character(round(difftime(t2.acw2, t1.acw2, units = "mins"))), "-", "-",
-                             as.character(round(difftime(t2.acw2.r, t1.acw2.r, units = "mins"))),
+movie.table$"Time (min)" = c("2",  
+                             as.character(round(difftime(t2.acw2, t1.acw2, units = "mins"))), 
+                             as.character(round(difftime(t2.acw2.r, t1.acw2.r, units = "mins"))), "-", "-",
                              as.character(round(difftime(t2.acw2.h, t1.acw2.h, units = "mins"))))
 movie.table$"$l(Y|\\hat{\\theta})$" = as.character(round(
-                                c(llik(acw.qn.h$map, Y = acw_mat, est = "Y"), 
+                                c(
                                 llik(latent_acw2.r$burnin.start, Y = acw_mat, est = "Y"),
                                 llik(latent_acw2$mkl, Y = acw_mat, est = "Y"),
+                                llik(latent_acw2.r$mkl, Y = acw_mat, est = "Y"),
                                 llik(latent_acw2.r$mcmc.mle, Y = acw_mat, est = "Y"),
                                 llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = "Y"),
-                                llik(latent_acw2.r$mkl, Y = acw_mat, est = "Y"),
                                 llik(latent_acw2.h$mkl, Y = acw_mat, est = "Y"))))
 
 movie.table$"$l(\\hat{\\theta})$" = as.character(round(
-                                c(llik(acw.qn.h$map, Y = acw_mat, est = "theta"),
+                                c(
                                 llik(latent_acw2.r$burnin.start, Y = acw_mat, est = "theta"),
-                                with(latent_acw2$mcmc.mle, llik(latent_acw2$mkl,
+                                with(latent_acw2$mcmc.pmode, llik(latent_acw2$mkl,
+                                     Y = acw_mat, sender.var = sender.var,
+                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
+                                with(latent_acw2.r$mcmc.pmode, llik(latent_acw2.r$mkl,
                                      Y = acw_mat, sender.var = sender.var,
                                      receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
                                 llik(latent_acw2.r$mcmc.mle, Y = acw_mat, est = "theta"),
                                 llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = "theta"),
-                                with(latent_acw2.r$mcmc.mle, llik(latent_acw2.r$mkl,
-                                     Y = acw_mat, sender.var = sender.var,
-                                     receiver.var = receiver.var, Z.var = Z.var, est = "theta")),
-                                with(latent_acw2.r$mcmc.mle, llik(latent_acw2.r$mkl,
+                                with(latent_acw2.r$mcmc.pmode, llik(latent_acw2.r$mkl,
                                      Y = acw_mat, sender.var = sender.var,
                                      receiver.var = receiver.var, Z.var = Z.var, est = "theta")))))
 
 movie.table$"$l(\\hat{\\theta}|Y)$" = as.character(as.numeric(movie.table$"$l(Y|\\hat{\\theta})$") + as.numeric(movie.table$"$l(\\hat{\\theta})$"))
 
-movie.table$sample = c("No", "No", "Yes", "-", "-", "Yes", "Yes")
-movie.table$code = c("R", "C", "C", "-", "-","C", "C")
-
 acw2 = latent_acw2.r$mkl$receiver - latent_acw2.r$mkl$sender
-movie.table$"Rating Cor." = c(cor(acw2, acw.qn.h$map$receiver - acw.qn.h$map$sender),
+movie.table$"Rating Cor." = c(
                                cor(acw2, latent_acw2$burnin.start$receiver - 
                                             latent_acw2$burnin.start$sender), 
                                cor(acw2, latent_acw2$mkl$receiver - latent_acw2$mkl$sender),
-                               cor(acw2, latent_acw2$mcmc.mle$receiver - latent_acw2$mcmc.mle$sender),
-                               cor(acw2, latent_acw2$mcmc.pmode$receiver - latent_acw2$mcmc.pmode$sender),
                                cor(acw2, latent_acw2.r$mkl$receiver - 
                                             latent_acw2.r$mkl$sender),
+                               cor(acw2, latent_acw2$mcmc.mle$receiver - latent_acw2$mcmc.mle$sender),
+                               cor(acw2, latent_acw2$mcmc.pmode$receiver - latent_acw2$mcmc.pmode$sender),
                                cor(acw2, latent_acw2.h$mkl$receiver - 
                                             latent_acw2.h$mkl$sender)
                              )
 
-print(xtable(movie.table, caption = "Estimation methods. The $ell$ function in the column titles indicates the log of the probability.", digits = 4, label = "movie.table"),
-      sanitize.text.function=function(x){x})
+print(xtable(movie.table, caption = "Comparison of stimation methods. The $\\ell$ function is the log of the probability.", digits = 4, label = "movie.table"), caption.placement = "top", sanitize.text.function=function(x){x})
 @
 
 <<r movie_results_likelihoods, eval = F, echo = F, results = "hide">>=
@@ -2941,13 +2894,13 @@ llik(latent_acw2.r$mcmc.pmode, Y = acw_mat, est = est)
 llik(latent_acw2.h$mcmc.pmode, Y = acw_mat, est = est)
 llik(latent_acw2.init.qn$mcmc.pmode, Y = acw_mat, est = est)
 
-with(latent_acw2$mcmc.mle, llik(latent_acw2$mkl, Y = acw_mat, est = est, #best
+with(latent_acw2$mcmc.pmode, llik(latent_acw2$mkl, Y = acw_mat, est = est, #best
      sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
-with(latent_acw2.r$mcmc.mle, llik(latent_acw2$mkl, Y = acw_mat, est = est,
+with(latent_acw2.r$mcmc.pmode, llik(latent_acw2$mkl, Y = acw_mat, est = est,
      sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
-with(latent_acw2.h$mcmc.mle, llik(latent_acw2.h$mkl, Y = acw_mat, est = est,
+with(latent_acw2.h$mcmc.pmode, llik(latent_acw2.h$mkl, Y = acw_mat, est = est,
      sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
-with(latent_acw2.init.qn$mcmc.mle, llik(latent_acw2.init.qn$mkl, Y = acw_mat, est = est,
+with(latent_acw2.init.qn$mcmc.pmode, llik(latent_acw2.init.qn$mkl, Y = acw_mat, est = est,
      sender.var = sender.var, receiver.var = receiver.var, Z.var = Z.var))
 
 #compare p(theta) under adjusted hyperpriors
@@ -3037,37 +2990,6 @@ latent.watch.init.r = ergmm(movie_net_watch_full ~ euclidean(d = 2) + rsender + 
                                                 Z.var = var(as.vector(Z))))
 @
 
-<< latent_watch_qn, eval = F, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
-
-W = as.sociomatrix(movie_net_watch_full, ignore.eval = F, attrname = "ratings_diff")
-N = nrow(W)
-
-#default hyperpriors ####
-set.seed(1)
-t1.watch.qn = Sys.time()
-latent_watch = lsqn(W, runs = 100, tol = .01, Z.init = "MDS") #MDS may be slightly better than rnorm in this example, though difference could just be due to randomness/seed. more runs can add a tiny improvement.
-t2.watch.qn = Sys.time()
-range(latent_watch$map$diff_Z); range(latent_watch$map$diff_Z2) #only one non~0 diff_Z value, but it has no out-edges and only three in-edges with values 1,1,2 
-t2.watch.qn - t1.watch.qn  #22 min (19 with another trial, Z.init = "rnorm") #may get slighlty better with more runs. 
-llik(latent_watch$map, Y = W, est = "Y") #10480510
-
-#adjusted hyperpriors ####
-set.seed(1)
-t1.watch.qn.h = Sys.time()
-latent_watch.h = lsqn(W, runs = 150, tol = .01, Z.init = "MDS", #may get a tiny bit better with more runs. 
-              v_a = 3, v_b  = 3, #default 3 
-              v_z = sqrt(N)/8,  #default sqrt(N)
-            s2_a = 1, s2_b = 1, #default 1
-              s2_z = 1, #default N/8 ** shrink sigma_z range
-              sigma2_B = 3) #default 9)
-t2.watch.qn.h = Sys.time() #~22 mins with 100 runs
-range(latent_watch.h$map$diff_Z); range(latent_watch.h$map$diff_Z2)
-llik(latent_watch.h$map, Y = W, est = "Y") #10480611
-#quantile(rinvchisq(100000, sqrt(N)/8, 1), probs = c(0.05, .5, .95))
-#quantile(rinvchisq(100000, 3, 1), probs = c(0.05, .5, .95))
-
-@
-
 << latent_watch_mle, eval = F, results = 'hide', echo = F, cache=T, cache.comments = FALSE, warning= FALSE>>=
 
 W = as.sociomatrix(movie_net_watch_full, ignore.eval = F, attrname = "ratings_diff")
@@ -3113,12 +3035,12 @@ t2.latent.watch.mle.h = Sys.time()
 llik(latent.watch.mle.h$start, Y = W, est = "Y")
 @
 
-There is a strong correlation of $0.95$ (or $0.976$ when weighted by the log of co-review counts) between a film's average rating and its ratings from the latent space model (receiver minus sender coefficient).
+There is a strong correlation of $0.95$ (or $0.976$ when weighted by the log of co-review counts) between a film's average star rating and its ratings from the latent space model.
 %?($x$ unweighted, $x$ when weighted by the logged counts of ratings).
-Figure \ref{fig:r movie_compare} shows this correlation, plotting the latent space scores against the average ratings and labeling points by review counts for each film. Although not pictured, the standard deviations in the ratings are fairly consistent. They range from 0.13 to 0.26 (95th percentile) with a median of 0.14. The high-end outliers have very few co-review counts, and only points with few co-reviews deviate strongly from the overall linear trend. We take a closer look at a couple of the films that deviate from the trend but have more than $20$ reviews, highlighted in green. The corresponding films are, from left to right, \textit{Shaft in Africa (1973)} and \textit{Assassination (1987)}. These films have a potential ``cult'' following based on their lead actors, Richard Roundtree (as Shaft) and Charles Bronson respectively. That may boost some of the user reviews, but when comparative reviews are considered in the latent space model the derived rating is lower.
+Figure \ref{fig:r movie_compare} shows this correlation, plotting the latent space scores against the average star ratings and labeling points by review counts for each film. Although not pictured, the standard errors in the ratings are fairly consistent. They range from 0.13 to 0.26 (95th percentile) with a median of 0.14. The high-end outliers have very few co-review counts, and only points with few co-reviews deviate strongly from the overall linear trend. We take a closer look at a couple of the films that deviate from the trend but have more than $20$ reviews, highlighted in green. The corresponding films are, from left to right, \textit{Shaft in Africa (1973)} and \textit{Assassination (1987)}. These films have a potential ``cult'' following based on their lead actors, Richard Roundtree (as Shaft) and Charles Bronson respectively. That may boost some of the user reviews, but when comparative reviews are considered in the latent space model the derived rating is lower.
 %also #79 with 32 reviews, Wanted: Dead or Alice (1987). Based on a three-season television show that launched steve mcqueen's career. 
 
-<<r movie_compare, eval = T, echo = F, dependson = c("movie_data", "setup"), cache = T, message = FALSE, warning = FALSE, fig.width = 6, results = "hide", fig.cap= "Latent space model scores vs. average ratings. The plotting characters are the review counts for each film. The red points are strong outliers to the linear trend, have very few reviews, and are excluded in calculating the best fit line. The green points are discussed in the paper." >>=
+<<r movie_compare, eval = T, echo = F, dependson = c("movie_data", "setup"), cache = T, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 3, fig.align="center", results = "hide", fig.cap= "Latent space model scores vs. average star ratings. The plotting characters are the review counts for each film. The red points are strong outliers to the linear trend, have very few reviews, and are excluded in calculating the best fit line. The green points are discussed in the paper." >>=
 
 library(ggplot2)
 
@@ -3136,12 +3058,12 @@ lm1 = lm(vc.acw[-x] ~ stars1[-x])
 
 ggplot(data1, aes(x = stars, y = rating, color = color)) + 
   geom_abline(slope = lm1$coefficients[2], intercept = lm1$coefficients[1], col = "gray") +
-  geom_text(aes(label=counts), size = 3) +
+  geom_text(aes(label=counts), size = 2, angle = -60) +
   theme_bw() +
-  ggtitle("Ratings Compared") +
-  xlab("Average Star Rating") + 
-  ylab("2-D Latent Space Rating") +
-  theme(legend.position = "none") +
+  ggtitle("Ratings compared") +
+  xlab("average star rating") + 
+  ylab("2-D latent space rating") +
+  theme(legend.position = "none", plot.title = element_text(size = 12)) +
   scale_colour_manual(values = c("black", "green", "red"))
 
 #check unweighted and weighted correlations
@@ -3159,10 +3081,10 @@ quantile(movie_sd, probs = c(0,.25,.5,.75,.90, .95, .97, 1))
 sd2[40]
 @
 
-It is somewhat surprising to find such a strong correlation between the two ratings methods. This may be due in part to homogeneity in the reviewer pool, which reduces the sources of bias discussed above. MovieLens was organized by a university and all reviewers in our data joined in 2000. The top four occupations of the reviewers are (in decreasing order): college/grad student, other/not specified, executive/managerial and academic/educator. This is certainly not representative of the population at large. The impact of our difference-based network model over average ratings may be more evident when reviewers are more heterogeneous. 
+It is somewhat surprising to find such a strong correlation between the two ratings methods pictured. This may be due in part to homogeneity in the MovieLens reviewer pool, which reduces the sources of bias discussed above. MovieLens was organized by a university and all reviewers in our data joined in 2000. The top four occupations of the reviewers are (in decreasing order): college/grad student, other/not specified, executive/managerial and academic/educator. This is certainly not representative of the population at large. The impact of our difference-based network model as compared to average star ratings may be more evident when reviewers are more heterogeneous. 
 
 %Because the reviews are strongly correlated - almost all within a third of a point so overall impression the same - and we have no ground truth to compare to
-We next consider the additional insight gained through latent space model positions and visualization. An interactive plot of the model output is available on the author's website (\url{http://www.stat.ucla.edu/~jane.carlen/pages/movie_net.html}). Each film is displayed as a node whose position is estimated by the latent space model. The nodes are colored by genre with size scaled to latent space model rating. For comparison, the average star ratings are listed next to the movie titles in the drop-down menu and when hovering over a node. For clear visualization, the nodes are limited to displaying their (at most) seven strongest out-edges. In-degree is not limited in the plot. Uncertainty in positions estimates is displayed in Figure \ref{fig:r movie_cloud}.
+We next consider the additional insight gained through latent space model positions and visualization. An interactive plot of the model output is included as an html file in the supplementary material, and available on the author's website (\url{http://www.stat.ucla.edu/~jane.carlen/pages/movie_net.html}). The nodes are colored by genre with size scaled to latent space model rating. For comparison, the average star ratings are listed next to the movie titles in the drop-down menu and when hovering over a node. For clear visualization, the nodes are limited to displaying their (at most) seven strongest out-edges. In-degree is not limited in the plot.
 %An edge's arrow indicates the direction from lower to higher-rated film.
 
 <<r movie_plot_setup, eval = T, echo = F, results = "hide", dependson = c("movie_model_r", "movie_model_h")>>=
@@ -3172,7 +3094,7 @@ write.csv(latent_acw2.r$mkl$Z, "~/Documents/citation/latent_ranking/movie_net_ac
 
 <<r movie_plot, eval = F, echo = F, fig.keep = "none", dependson = c("movie_model_r", "movie_model_h")>>=
 
-#not evaluated here. stored as movie_neth.html
+#not evaluated here. stored as movie_net.html and movie_neth.html
 Z = as.matrix(read.csv("~/Documents/citation/latent_ranking/movie_net_acwh_Z.csv")[,2:3])
 
 #to align with other picture
@@ -3240,13 +3162,14 @@ for (i in 1:N) {
 }
 @
 
-The movies clearly cluster by genre even though genre was not a term in the model. Even those movies with hybrid genres are placed roughly between their two component genres. However, there are a few films that reside outside of their genre cluster. In those cases the plot can highlight incomplete or incorrect classification. For example, the film \textit{Coogan's Bluff (1968)} is categorized as a crime film by MovieLens, but its latent position is among actions and westerns. The Internet Movie Database (\textit{IMDb}) entry for this film describes it as ``An Arizona deputy goes to New York City to escort a fugitive back into custody,'' and the lead role is played by action/crime/western star Clint Eastwood \citep{coogan}. This film has heavy action and western influences which its latent position reveals. Another example of misclassification is the two ``action'' films \textit{The Kid (1921)} and \textit{Minnie and Moskowitz (1971)}, positioned between crimes and westerns. Their genres listed on \citet{imdb} are comedy/drama/family, and comedy/drama/romance, respectively. Neither is well-classified as an action film, and their positions reflect this, though without comic films in the data the correct positions are lost.
+\subsection{Genre detection} \label{genres}
+The visualizations shows that movies clearly cluster by genre even though genre was not a term in the model. Movies with hybrid genres are placed roughly between their two component genres. However, there are a few films that reside outside of their genre cluster. In those cases the plot can highlight incomplete or incorrect classification. For example, the film \textit{Coogan's Bluff (1968)} is categorized as a crime film by MovieLens, but its latent position is among actions and westerns. The Internet Movie Database (\textit{IMDb}) entry for this film describes it as ``An Arizona deputy goes to New York City to escort a fugitive back into custody,'' and the lead role is played by action/crime/western star Clint Eastwood \citep{coogan}. This film has heavy action and western influences which its latent position reveals. Another example of misclassification is the two ``action'' films \textit{The Kid (1921)} and \textit{Minnie and Moskowitz (1971)}, positioned between crimes and westerns. Their genres listed on \citet{imdb} are comedy/drama/family, and comedy/drama/romance, respectively. Neither is well-classified as an action film, and their positions close together and outside the action cluster reflect this, and also recognize their similarity.
 
-The continuous positions from the latent space model are more precise identifiers of movie type than discrete cluster labels. Like the journal citation network visualized in Section \ref{Example1}, the clusters are discernible but irregularly shaped and blend into each other. The positions aid in identifying sub-genres, which may be valuable for recommendation systems. For example, the westerns that tail into the crime cluster, \textit{Unforgiven (1992)}, \textit{Tombstone(1993)}, and \textit{Dead Man (1995)} reveal a "modern western" subgenre. These films are much newer than the median year of westerns in the data (1968).
+The continuous positions from the latent space model are more precise identifiers of movie type than discrete cluster labels. Like the journal citation network visualized in Section \ref{Visualization}, the clusters are discernible but irregularly shaped and blend into each other. The positions aid in identifying sub-genres, which may be valuable for recommendation systems. For example, the westerns that tail into the crime cluster, \textit{Unforgiven (1992)}, \textit{Tombstone(1993)}, and \textit{Dead Man (1995)} reveal a "modern western" subgenre. These films are much newer than most westerns in the data, with median year 1968.
 
-If no genre labels are given the fit positions provide rich input for a clustering algorithm. To illustrate, we apply k-means clustering with three clusters which we expect to correspond roughly to the action, crime and western films (\citealt{kmeans}, \citealt{r}). We use pair-counting to measure accuracy, with the caveat that not all pre-assigned genres are correct, as discussed above. Films originally labeled with two genres are considered a match if assigned to either of those genres. Table \ref{class.table} compares the k-means output to pre-assigned genre labels. Of the 128 films in the network, 105 are assigned to matching labels. The most common change in classification is from action to crime. The comparison is visualized in Figure \ref{fig:movie_kmeans}. Most films that switch labels are positioned near the boundary of the three classes, indicating that a single label is probably insufficient. To put these results in perspective, we implemented two popular community detections methods to the film matrix, a Louvain modularity maximization method and informap, as implemented in \pkg{igraph}. Both are unsupervised and require undirected networks, so we input the symmetric matrix of dyad totals. The Louvain method returned three communities, one that corresponded to westerns, one to action and crime films, and a smaller one to crime films in the center of the plot. There were 38 total misclassifications. Infomap returned only one community, highlighting the lack of distinct divisions between genres that positions are able to capture. 
+If no genre labels were given the fit positions provide rich input for a clustering algorithm. To illustrate, we apply k-means clustering with three clusters, which we expect to correspond roughly to the action, crime and western films (\citealt{kmeans}, \citealt{r}). We use pair-counting to measure accuracy, with the caveat that not all pre-assigned genres are correct, as discussed above. Films originally labeled with two genres are considered a match if assigned to either of those genres. Table \ref{class.table} compares the k-means output to pre-assigned genre labels. Of the 128 films in the network, 105 are assigned to matching labels. The most common change in classification is from action to crime. The comparison is visualized in Figure \ref{fig:movie_kmeans}. Most films that switch labels are positioned near the boundary of the three classes, indicating that a single label is probably insufficient. To put these results in perspective, we implemented two popular community detection methods to the film matrix, a Louvain modularity maximization method and infomap, as implemented in \pkg{igraph} \citep{igraph}. Both are unsupervised and require undirected networks, so we input the symmetric matrix of dyad totals. The Louvain method returned three communities, one that corresponded to westerns, one to both action and crime films, and a smaller third one to action films in the center of the plot. There were 38 total misclassifications. Infomap returned only one community, highlighting the lack of distinct divisions between genres that latent positions are able to capture. 
 
-<<movie_kmeans, cache = T, echo = F, fig.height = 3, fig.width = 7, results = "asis", fig.cap = "Film network colored by k-means class with shape determined by pre-assigned genre. Centers of the k-means classes are labeled 1-3.", dependson = c("movie_model_r"), message = F>>=
+<<movie_kmeans, cache = T, echo = F, fig.height = 3, fig.width = 6, fig.align = "center", results = "asis", fig.cap = "Film network colored by k-means class with shape determined by pre-assigned genre. Centers of the k-means classes are labeled 1-3.", dependson = c("movie_model_r"), message = F>>=
 
 library(stringr)
 
@@ -3273,7 +3196,7 @@ kmeans_h = ggplot(data1, aes(x = x, y = y, color = `k-means class`, shape = `ass
     geom_point(data = data2, aes(x, y), inherit.aes = F, shape = c("1","2","3"), size = 5) + 
   scale_color_manual(values = rainbow(G, alpha = .7)[c(1,2,3)]) +
   theme_void() + 
-  theme(legend.text = element_text(size = 10), legend.title = element_text(size = 10)) +
+  theme(legend.text = element_text(size = 10), legend.title = element_text(size = 10))
   #ggtitle("Comparison of k-means clusters to pre-assigned genres")
 
 kmeans_h
@@ -3376,42 +3299,28 @@ text(labels = movie_net_acw%v%"titles", movie.page.rank, vc.acw, cex = .5, srt =
 
 \section{Discussion}\label{Discussion}
 
-In this paper we have introduced a method for rating objects based on relational data using a latent space network model. Unlike standard network-based ranking methods such as PageRank, it is not a variant on a centrality measure. Instead, it weighs the relative in- and out-flow of an object while controlling for its position in space -- a position that is determined by its network ties. It is thereby an appropriate measure of an object's prestige within the network. In addition, the model provides estimates of uncertainty in the rankings that allow us to determine the significance of ranking differences. The quasi-Stigler model returns similar estimates of uncertainty in ratings, but as a network-generating model it underestimates uncertainty because it is conditioned on dyad totals.
+In this paper we have introduced a method for rating objects based on relational data using a latent space network model. Unlike standard network-based ranking methods such as PageRank, it is not a variant on a centrality measure. Instead, it weighs the relative in- and out-flow of an object while controlling for its position in space -- a position that is determined by its network ties. It is thereby an appropriate measure of an object's importance, influence or prestige within the network. In addition, the model provides estimates of uncertainty in the rankings that allow us to determine the significance of ranking differences. The quasi-Stigler model returns similar estimates of uncertainty in ratings, but as a network-generating model it underestimates uncertainty because it is conditioned on dyad totals.
 
-The latent space ranking method is especially advantageous when elements to be rated have some underlying, but difficult to measure, similarities. In our applications these were the statistics journals with one or more type (theoretical, computational, etc.) and films of one or more genre. If additionally the sub-groups have characteristically different levels of activity we may be able to account for that using indicator covariates. Unfortunately, we are not able to obtain and present citation data for related fields of journals (e.g. economics, applied mathematics) to examine this further in the context of academic journals.
+The latent space model is also valuable for its meaningful visualization of network data, which facilitates user exploration of the network itself. One could use the dynamic plots we present to find journals to submit articles to or films to watch that are similar to a given one.
+%i checked a standard plot and it's OK but not nearly as good:
+%plot(movie_net_acw, vertex.col = as.numeric(as.factor(movie_net_acw%v%"genres")), cex = 1.3, edge.col ="grey")
+While the latent space rankings are very similar to those of the quasi-Stigler model, the visualization helps us better understand what is driving each journal's rating. Furthermore, the visualizations allow for nuanced genre detection. Though our models do not include a term to capture genre, the latent space positions have proven to cluster in agreement with pre-assigned genres. In the case where labels are not provided, we showed that k-means clustering on the estimated positions can produce good results. In preliminary comparisons this technique has performed better than clustering algorithms on the raw data, but further work is needed to establish these results.
+
+The latent space ranking method is especially advantageous when elements to be rated have some underlying, but difficult to measure, similarities. In our applications these were the statistics journals with one or more type (theoretical, computational, etc.) and films of one or more genre. However, the overall patterns of activity were fairly homogeneous. The journal set was restricted to a subset of a single field to be suitable for the quasi-Stigler model. Unfortunately, we are not currently able to obtain and present citation data for related fields of journals, e.g. economics, applied mathematics. A subject for future work is to extend the data and model to additional fields with different citation patterns. One general strategy to do this is to estimate clusters in the model and add covariates that capture the different levels of activity between them, or alter the random effects structure to have cluster-specific means. However, in the data we have considered the clusters are fuzzy and irregularly shaped, and the latent position cluster model of \citet{handcock07} fails to fit meaningful clusters. Our preferred avenue is to retain the current model structure but allow multidimensional sender and receiver coefficients, which capture the multi-faceted relationships in the network. This would build on the work of \citet{hoff09}, who proposed multiplicative latent factor models with multi-dimensional sender and receiver coefficients. Multidimensional random effects can also be visualized with the latent positions. 
 
 % \section{Data Expansion} - ON HOLD, this would take a lot of data scraping work and/or consent/release from JCR. Varin et al don't have it, said the data they did share was hard to negotiate.
 % - \citet{varinetal} Data comes from 2010 Web of Science published by Thomson Reuters. Want to expand to include all of Statistics and Probability (?) and Mathematics, Applied ( 253 journals) and Agricultural, Economics and Policy (? 17 journals)
 % Note JCR can give related journals, e.g.  http://admin-apps.webofknowledge.com/JCR/JCR?RQ=RELATED_JOURNALS&rank=6&journal=CAN+J+AGR+ECON&query_new=true, and this could be another use of the network model
 
-Another type of heterogeneity that may bias our results is when some nodes in the network are very poorly connected or even isolated. We saw in the MovieLens example that films with very few reviews are most likely to deviate from an overall ratings correlation. One way to combat this is to make prior variance distributions less diffuse, which stabilizes the position estimates for low-connectivity without sacrificing model fit, in our experience. To further combat this we could incorporate a film's average star rating as a prior expectation for its receiver coefficient. % [implementable in ergmm or only prior mean 0?] , while keeping the sender coefficients at prior mean zero
-Although this is not currently implemented in \pkg{latentnet} it could be incorporated in the future.
+Another type of heterogeneity that may bias our results is due to nodes that are very poorly connected. We saw in the MovieLens example that films with very few reviews are most likely to deviate from an overall ratings correlation. One way to combat this is to make prior variance distributions less diffuse, which stabilizes the position estimates for low-connectivity nodes without sacrificing ratings estimates, in our experience. To further combat this we could incorporate a film's average star rating as a prior expectation for its receiver coefficient.
+%while keeping the sender coefficients at prior mean zero
+%Although this is not currently implemented in \pkg{latentnet} it could be incorporated in the future.
 
-The latent space model is also valuable for its meaningful visualization of network data, which facilitates user exploration of the network itself. One could use the dynamic plots we present to find journals to submit articles to or films to watch that are similar to a given one.
-%i checked a standard plot and it's OK but not nearly as good:
-%plot(movie_net_acw, vertex.col = as.numeric(as.factor(movie_net_acw%v%"genres")), cex = 1.3, edge.col ="grey")
-While the latent space rankings are very similar to those of the quasi-Stigler model, the visualization helps us better understand what is driving each journal's rating. 
+We have established that quasi-Newton estimation for the latent space rating model can perform as well as Bayesian MCMC estimation. The speed of quasi-Newton estimation enables us to fit larger networks than were practical with MCMC estimation. Although not discussed in the paper, we were able to fit an expanded film network of 510 nodes in roughly 45 minutes, whereas it would take over 24 hours with MCMC estimation. However, we still face the scaling problem of the number of edges growing $O(n^2)$. An area of future work is to integrate a local dependence structure into the model. For many large networks we expect that the positions and random effects for each node depend primarily on a neighborhood around the node and a few high-activity nodes with wide reach. This would reduce the storage space and number number of calculations needed for each update step, assuming we can develop a simple method for identifying the nodal neighborhoods. The number of edges to consider would grow only $O(n)$ in the case that mean degree were not an increasing function of graph size, which is a realistic assumption of many social networks. \citet{raftery12} took such an approach for their case-control approximate likelihood model, which they incorporated into MCMC estimation. By integrating a local dependence structure approach into quasi-Netwon estimation we could multiply the gains in speed. Finally, we note that many of the arguments in favor of quasi-Newton estimation apply to other direct optimization methods, and comparing competing optimization methods is a subject of future work. 
 
-Furthermore, the visualizations allow for nuanced genre detection. Though our models do not include a term to capture genre, the latent space positions have proven to cluster in agreement with pre-assigned genres. In the case where labels are not provided, we showed that k-means clustering on the estimated positions can produce good results. In preliminary comparisons this technique has performed better than clustering algorithms on the raw data, but further work is needed to establish these results.
-
-The speed of the quasi-Newton algorithm enables us to fit larger networks than were practical with MCMC estimation. We were able to fit an expanded film network of 510 nodes in roughly 20 minutes, whereas it would take over 24 hours with MCMC estimation. (the quasi-Newton optimization implemented by \pkg{latentnet} takes roughly double as long as our quasi-Newton method in this case.)
-Porting the body of our code to \proglang{C++} using \pkg{Rcpp} would further increase the speed. However, we still face the scaling problem of the number of edges growing $O(n^2)$. One way to address this is to parallelize the updates to positions, which is straightforward since the algorithm updates positions synchronously. An area of future work is to develop a model with a local dependence structure. For many large networks we expect that the positions and random effects for each node depend primarily on a neighborhood around the node and a few high-activity nodes with wide reach. This would reduce the storage space and number number of calculations needed for each update step, assuming we can develop a simple method for identifying the nodal neighborhoods. The number of edges to consider would grow only $O(n)$ in the case that mean degree were not an increasing function of graph size, which is a realistic assumption of many social networks.
-
-Recently, variational Bayesian inference methods have been developed for latent space network models and implemented in the \pkg{R} package \pkg{VBLPCM}. Variational Bayesian inference is another strategy to greatly reduce computation time for the model. However, the algorithms developed currently only apply to binary networks, not valued networks of the type discussed here. Given the speed of quasi-Newton estimation and uncertainty in the level of bias introduced by variational techniques we did not undertake to expand the variational methods to valued networks. Another line of work would be to implement that extension and compare the speed and results to the optimization methods described here.
+The variational Bayesian inference methods developed for latent space network models and implemented in the \pkg{R} package \pkg{VBLPCM} currently only apply to binary networks, not valued networks of the type discussed here. Given the speed of quasi-Newton estimation and uncertainty in the level of bias introduced by variational techniques we did not undertake to expand the variational methods to valued networks. Another line of work would be to implement that extension and compare the speed and results to the optimization methods described here.
 
 \break
-
-<<variational_bayes, echo = F, eval = F, results = 'hide'>>=
-
-library(VBLPCM)
-v.start<-vblpcmstart(movie_net_acw_full,G=3,model="rsocial",LSTEPS=1e4)
-v.start<-vblpcmstart(movie_net_acw_full,model="rsocial",LSTEPS=1e4)
-v.fit<-vblpcmfit(v.start,STEPS=50)
-plot(v.fit)
-plot(gof(v.fit,GOF=~degree))
-Z = v.fit$V_z[!isolates_acw_thin,]
-
-@
 
 \newpage
 
