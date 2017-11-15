@@ -4,8 +4,10 @@
 #
 #    if est is "MAP" return l(Y|theta) + l(theta) ; if "Y" return l(Y|theta) ; if "theta" return l(theta)
 #    if 'object' has parameter values they will be used (not including hyperparameters)
-#    family = poisson fits the normal poisson latent space model
+#    family = poisson fits the poisson latent space model
 #    family = binomial fits a quasi-Stiglery (quasi-symmetric) type model with positions -- off by a constant
+#    family = poisson_md fits the poisson latent space model with multi-dimensional random sender and receiver effects
+#             assume sr dimension same as Z dimension
 
 library(extraDistr) # for divnchisq
 library(gtools) #for logit function
@@ -40,22 +42,33 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
   if(!is.null(object$beta.var)) beta.var = object$beta.var
   
   Z_dist = as.matrix(dist(Z, upper = T))
-  
-  #l_lambda = t(receiver + t(sender - Z_dist)) + beta;
-  l_lambda = beta + outer(sender, receiver, "+") - Z_dist #slightly faster
 
   if (family == "poisson") {
+    #l_lambda = t(receiver + t(sender - Z_dist)) + beta;
+    l_lambda = beta + outer(sender, receiver, "+") - Z_dist #slightly faster
     lgamma.constant = sum(lgamma(as.vector(Y+1)), na.rm = T) 
     lambda = exp(l_lambda); diag(lambda) = 0
     pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
   }
 
   if (family == "binomial") {
+    #l_lambda = t(receiver + t(sender - Z_dist)) + beta;
+    l_lambda = beta + outer(sender, receiver, "+") - Z_dist #slightly faster
     lambda = inv.logit(l_lambda)
     Yt = Y + t(Y); diag(Yt) =  0
     pY =  sum( Y * log(lambda), na.rm = T) + sum((Yt - Y)*log(1-lambda), na.rm = T)
   }   
   
+  if (family == "poisson_md_proj") { #multidimensional projection model
+    sr = lapply(1: (length(sender)/N), function(x) {
+      outer(sender[ (N*(x-1)+1) : (N*(x))], receiver[(N*(x-1)+1) : (N*(x))], "+") } )
+    zj_zi = lapply(1: (length(sender)/N), function(x) { t(outer(Z[,x], Z[,x], "-")) } )
+    sr_zj_zi = lapply(1: (length(sender)/N), function(x) {sr[[x]] * zj_zi[[x]]})
+    l_lamdba = beta + Reduce('+', sr_zj_zi)/Z_dist - Z_dist
+    lambda = exp(l_lambda); diag(lambda) = 0
+    pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
+  }
+
   if (est == "Y") {return(pY)}
   
   ptheta = log(exp(-beta^2/(2*beta.var)) / sqrt(2*pi*beta.var)) +
@@ -81,8 +94,16 @@ llik2 <- function(theta, Y, d, est = "MAP", family = "poisson") {
   
   B = theta[1]
   Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
-  a = theta[(2+d*n) : (n+1+d*n)]
-  b = theta[(n+2+d*n) : (n*(d+2)+1)]
+  
+  if (family != "poisson_md") {
+    a = theta[(2+d*n) : (n+1+d*n)]
+    b = theta[(n+2+d*n) : (1+(2+d)*n)] 
+    d2 = 1
+  } else {
+    a = theta[(2+d*n) : (2*d*n + 1)] 
+    b = theta[(2*d*n + 2) : (3*d*n + 1)]  
+    d2 = d #assume directed and undirected effects have same dimension
+  }
   
   if (est == "MAP") {
     nparam = length(theta)
@@ -93,8 +114,8 @@ llik2 <- function(theta, Y, d, est = "MAP", family = "poisson") {
   
   #exact update conditioned on graph parameters
   if (est == "MAPe") {
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
+    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n*d2 + 2 + prior.sender.var)
+    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n*d2 + 2 + prior.receiver.var)
     sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
   } 
 
@@ -307,14 +328,22 @@ llik_hat2 <- function(theta, Y, d, est = "Y", family = "poisson",
 #----------------------------------------------------------------------------------------------------
 # 3. gradient: llik_gr, llik_gr_hat -----------------------------------------------------------------------------------------------
 
-llik_gr <- function(theta, Y, d, est = "MAP") {
+llik_gr <- function(theta, Y, d, est = "MAP", family = "poisson") {
   
   n = nrow(Y)
-
   B = theta[1]
   Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
-  a = theta[(2+d*n): (1+n+d*n)]
-  b = theta[(2+n+d*n) : (n*(d+2) + 1)]
+  
+  
+  if (family != "poisson_md") {
+    a = theta[(2+d*n) : (n+1+d*n)]
+    b = theta[(n+2+d*n) : (1+(2+d)*n)] 
+    d2 = 1
+  } else {
+    a = theta[(2+d*n) : (2*d*n + 1)] 
+    b = theta[(2*d*n + 2) : (3*d*n + 1)]  
+    d2 = d #assume directed and undirected effects have same dimension
+  }
   
   if (est == "MAP") {
     nparam = length(theta)
@@ -326,8 +355,8 @@ llik_gr <- function(theta, Y, d, est = "MAP") {
   #exact update of variance parameters conditioned on graph parameters
   if (est == "MAPe") {
     #optimal values
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
+    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n*d2 + 2 + prior.sender.var)
+    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n*d2 + 2 + prior.receiver.var)
     sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
   }
   
@@ -340,23 +369,28 @@ llik_gr <- function(theta, Y, d, est = "MAP") {
   
   #add sampling?
   dist_inv = 1/Z_dist; diag(dist_inv) = rep(0, N) #term1 = cbind(term1, term1)
-  tmp1 = (Y + t(Y)) * dist_inv
-  tmp2 = dist_inv * (lambda + t(lambda))
-  zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))}) # N, N x d matrices
-  tmp3 = as.vector(t( sapply(1:N, function(i) {colSums(tmp2[i,]*zid_zjd[[i]])}) - #d x N -> N x d
-                        sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])}) ))#d x N -> N x d
   
-  #return
-  if (est == "Y") {
-    return(c(sum(da), #sum(Y - lambda)
-         tmp3,
-         da,
-         db))
-  }
+  #multidimensional sender and receiver
   
-  if (est == "MAP" ) {
+  if (family != "poisson_md") {
     
-    return(c(-B/beta.var + sum(da), #sum(Y - lambda)
+    tmp1 = (Y + t(Y)) * dist_inv
+    tmp2 = dist_inv * (lambda + t(lambda))
+    zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))}) # N, N x d matrices
+    tmp3 = as.vector(t( sapply(1:N, function(i) {colSums(tmp2[i,]*zid_zjd[[i]])}) - #d x N -> N x d
+                          sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])}) ))#d x N -> N x d
+    
+    #return
+    if (est == "Y") {
+      return(c(sum(da), #sum(Y - lambda)
+           tmp3,
+           da,
+           db))
+    }
+  
+    if (est == "MAP" ) {
+    
+     return(c(-B/beta.var + sum(da), #sum(Y - lambda)
              
              tmp3 - as.vector(Z)/sigma2_z, # d x N
              
@@ -372,10 +406,10 @@ llik_gr <- function(theta, Y, d, est = "MAP") {
                (1 + Z.var.df/2)/sigma2_z)
              
            )
-  }
+    }
   
-  if (est == "MAPe") {
-    return(c(-B/beta.var + sum(da), #sum(Y - lambda)
+    if (est == "MAPe") {
+      return(c(-B/beta.var + sum(da), #sum(Y - lambda)
              
              tmp3 - as.vector(Z)/sigma2_z, # d x N
              
@@ -383,7 +417,60 @@ llik_gr <- function(theta, Y, d, est = "MAP") {
              
              db - b/sigma2_b)
            )
+    }
+  } else {
+    
+    sr = lapply(1:d2, function(x) {
+      outer(a[ (N*(x-1)+1) : (n*(x))], b[(n*(x-1)+1) : (n*(x))], "+")
+    })
+    zj_zi = lapply(1: d2, function(i) { t(outer(Z[,i], Z[,i], "-")) } )
+    sr_zj_zi = lapply(1: (d2), function(i) {sr[[i]] * zj_zi[[i]]})
+    
+    tmp5 = Reduce('+', sr_zj_zi)
+    l_lamdba = beta + tmp5/Z_dist - Z_dist
+    lambda = exp(l_lambda); diag(lambda) = 0
+    
+    zj_zi3 = lapply(zj_zi, function(x) {x*dist_inv^3})
+    tmp4 = Y - lambda
+  
+    dB = sum(tmp4)
+    da = unlist(lapply(zj_zi, function(x) {rowSums(Y*dist_inv*(x - lambda))}))
+    db = unlist(lapply(zj_zi, function(x) {colSums(Y*dist_inv*(x - lambda))}))
+    dz = unlist(lapply(sr, function(x) {  tmp = x*dist_inv*tmp4
+                                          return(rowSums(tmp) + colSums(tmp))  })) +
+         unlist(lapply(zj_zi3, function(x) { tmp = x * (tmp5+1)
+                                             return(rowSums(tmp) + colSums(tmp)) }))
+    
+      if (est == "Y") {
+       return(c(dB,
+                dz,
+                da,
+                 db))
+     } 
+    
+      if (est == "MAP" ) {
+         return(c(dB - B/beta.var,
+              dz - as.vector(Z)/sigma2_z,
+              da - a/sigma2_a,
+              db - b/sigma2_b,
+              
+              N*d2*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
+              
+              N*d2*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
+              
+              N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
+                (1 + Z.var.df/2)/sigma2_z)) 
+      }
+    
+      if (est == "MAPe" ) {
+            c(dB - B/beta.var,
+              dz - as.vector(Z)/sigma2_z,
+              da - a/sigma2_a,
+              db - b/sigma2_b)
+       }
+    
   }
+  
   
 }
 # can we pass the same sample to the gradient function?
@@ -465,26 +552,29 @@ llik_gr_hat <- function(theta, Y, d, est = "MAP",
 # ------------------------------------------------------------------------------------------------
 # 4. NOTES --------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------
-theta.sann = optim(c(B, Z, a, b),
-                   Y = Y, d = 2, llik_hat2, method = "SANN",
-                   lower = c(rep(-Inf, 1 + N*(d+2)), 0, 0, 0),
-                   control=list(maxit = 200, fnscale = -1))
-
-theta.cg = optim(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z),
-                 Y = Y, d = 2, llik2, method = "CG",
-                 lower = c(rep(-Inf, 1 + N*(d+2)), 0, 0, 0),
-                 control=list(maxit = 200, fnscale = -1))
-
-theta.bfgs = optim(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z), #53 seconds
-                   Y = t(Cmatrix), d = 2, llik2, method = "BFGS",
-                   lower = c(rep(-Inf, 1 + N*(d+2)), 0, 0, 0),
-                   control=list(maxit = 200, fnscale = -1))
-
-theta = unlist(latent.srp2.init.res$mkl)
-llik2(theta, Y = Y, d = 2, est = "Y")
-llik2(theta.bfgs$par, Y = Y, d = 2, est = "Y")
-llik_hat2(theta.bfgs$par, Y = Y, d = 2, r = 1, margin = "none", est = "Y")
-llik_hat2(theta.sann$par, Y = Y, d = 2, r = .25, margin = "none", est = "Y") 
-llik_hat2(theta.cg$par, Y = Y, d = 2) 
+#
+# other optimization methods
+#
+# theta.sann = optim(c(B, Z, a, b),
+#                    Y = Y, d = 2, llik_hat2, method = "SANN",
+#                    lower = c(rep(-Inf, 1 + N*(d+2)), 0, 0, 0),
+#                    control=list(maxit = 200, fnscale = -1))
+# 
+# theta.cg = optim(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z),
+#                  Y = Y, d = 2, llik2, method = "CG",
+#                  lower = c(rep(-Inf, 1 + N*(d+2)), 0, 0, 0),
+#                  control=list(maxit = 200, fnscale = -1))
+# 
+# theta.bfgs = optim(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z), #53 seconds
+#                    Y = t(Cmatrix), d = 2, llik2, method = "BFGS",
+#                    lower = c(rep(-Inf, 1 + N*(d+2)), 0, 0, 0),
+#                    control=list(maxit = 200, fnscale = -1))
+# 
+# theta = unlist(latent.srp2.init.res$mkl)
+# llik2(theta, Y = Y, d = 2, est = "Y")
+# llik2(theta.bfgs$par, Y = Y, d = 2, est = "Y")
+# llik_hat2(theta.bfgs$par, Y = Y, d = 2, r = 1, margin = "none", est = "Y")
+# llik_hat2(theta.sann$par, Y = Y, d = 2, r = .25, margin = "none", est = "Y") 
+# llik_hat2(theta.cg$par, Y = Y, d = 2) 
 
 
