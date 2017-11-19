@@ -8,11 +8,16 @@
 #    family = binomial fits a quasi-Stiglery (quasi-symmetric) type model with positions -- off by a constant
 #    family = poisson_md fits the poisson latent space model with multi-dimensional random sender and receiver effects
 #             assume sr dimension same as Z dimension
+#
+#    for approximate likelihood schemes see llik_approx.R
+#
+# --------------------------------------------------------------------------------------------------
 
 library(extraDistr) # for divnchisq
 library(gtools) #for logit function
+
 #----------------------------------------------------------------------------------------------------
-# 1. exact: llik, llik2 ----------------------------------------------------------------------------------------------------
+# 1. likelihood: llik, llik2 ----------------------------------------------------------------------------------------------------
 #   assumes no self loops
 #   (for weighting?) add a constant to the data matrix (Y) if it has zeros (should be >=1 so no neg weights)
 #       this was found to be advantageous for residuals anyway
@@ -25,7 +30,12 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
                  Z=NULL, sender.var = 10, receiver.var = 10, Z.var = 10,
                  beta.var = 9, sender.var.df = 3, receiver.var.df = 3, Z.var.df = NULL,
                  prior.sender.var = 1, prior.receiver.var = 1, prior.Z.var = NULL,
-                 est = "MAP", family = "poisson") {
+                 est = "MAP", family = "poisson",
+                 u = NULL, v = NULL,
+                 u.var = 10, v.var = 10,
+                 u.var.df = 3, v.var.df = 3,
+                 prior.u.var = 1, prior.v.var = 1
+                 ) {
   
   if(is.null(Y)) {Y = object$model$Ym}
   if(is.null(Z)) {Z = object$Z}
@@ -53,21 +63,39 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
 
   if (family == "binomial") {
     #l_lambda = t(receiver + t(sender - Z_dist)) + beta;
-    l_lambda = beta + outer(sender, receiver, "+") - Z_dist #slightly faster
+    l_lambda = beta + outer(sender, receiver, "+") + - Z_dist #slightly faster
     lambda = inv.logit(l_lambda)
     Yt = Y + t(Y); diag(Yt) =  0
     pY =  sum( Y * log(lambda), na.rm = T) + sum((Yt - Y)*log(1-lambda), na.rm = T)
   }   
-  
-  if (family == "poisson_md_proj") { #multidimensional projection model
-    sr = lapply(1: (length(sender)/N), function(x) {
-      outer(sender[ (N*(x-1)+1) : (N*(x))], receiver[(N*(x-1)+1) : (N*(x))], "+") } )
-    zj_zi = lapply(1: (length(sender)/N), function(x) { t(outer(Z[,x], Z[,x], "-")) } )
-    sr_zj_zi = lapply(1: (length(sender)/N), function(x) {sr[[x]] * zj_zi[[x]]})
-    l_lamdba = beta + Reduce('+', sr_zj_zi)/Z_dist - Z_dist
+
+  if (family == "poisson_l") { 
+    if (ncol(u) == 1) {u = c(u); v = c(v)} #for outer
+    l_lambda = beta + outer(sender, receiver, "+") + outer(u, v, "+")/(Z_dist+1) - Z_dist
     lambda = exp(l_lambda); diag(lambda) = 0
     pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
   }
+  
+  #poisson, multiplicative random effects
+  if (family == "poisson_m") { 
+    l_lambda = beta + outer(sender, receiver, "+") + u %*% t(v) - Z_dist
+    lambda = exp(l_lambda); diag(lambda) = 0
+    pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
+  }
+  
+  #poisson, multiplicative, project
+  #if (family == "poisson_m_proj") { }
+  
+  #poisson, additive, project
+  #if (family == "poisson_a_proj") { #multidimensional projection model
+  #  d = ncol(Z) #model assumes rank = dimension
+  #  sr = lapply(1:d, function(x) {outer(c(u[,x]), c(v[,x]), "+") } )
+  #  zj_zi = lapply(1:d, function(x) { t(outer(Z[,x], Z[,x], "-")) } )
+  #  sr_zj_zi = lapply(1:d, function(x) {sr[[x]] * zj_zi[[x]]})
+  #  l_lamdba = beta + Reduce('+', sr_zj_zi)/Z_dist - Z_dist
+  #  lambda = exp(l_lambda); diag(lambda) = 0
+  #  pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
+  #}
 
   if (est == "Y") {return(pY)}
   
@@ -79,6 +107,15 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
     log(dinvchisq(receiver.var, receiver.var.df, prior.receiver.var)) + 
     log(dinvchisq(Z.var, Z.var.df, prior.Z.var))
   
+  #if we have u,v terms:
+  if (length(grep("poisson_", family)) > 0) {
+    ptheta = ptheta + 
+             sum(log(exp(-u^2/(2*u.var)) / sqrt(2*pi*u.var))) + 
+             sum(log(exp(-v^2/(2*v.var)) / sqrt(2*pi*v.var))) +   
+             log(dinvchisq(u.var, u.var.df, prior.u.var)) + 
+             log(dinvchisq(v.var, v.var.df, prior.v.var))
+  }
+  
   if (est == "theta") {return(ptheta)}
   
   map = pY + ptheta # = p(Y|theta) + p(theta)
@@ -88,470 +125,204 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
 }
 
 #for using llik with optim:
-llik2 <- function(theta, Y, d, est = "MAP", family = "poisson") {
+llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson") {
   
   n = nrow(Y)
   
   B = theta[1]
   Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
   
-  if (family != "poisson_md") {
-    a = theta[(2+d*n) : (n+1+d*n)]
-    b = theta[(n+2+d*n) : (1+(2+d)*n)] 
-    d2 = 1
-  } else {
-    a = theta[(2+d*n) : (2*d*n + 1)] 
-    b = theta[(2*d*n + 2) : (3*d*n + 1)]  
-    d2 = d #assume directed and undirected effects have same dimension
+  a = theta[(2+d*n) : (1 + n+d*n)]
+  b = theta[(n+2+d*n) : (1+(2+d)*n)] 
+  u = v = sigma2_u = sigma2_v = NULL
+  
+  if (length(grep("poisson_", family)) > 0) {
+    u = matrix(theta[(2+(2+d)*n) : (1+(2+d+R)*n)], ncol = R)
+    v = matrix(theta[(2+(2+d+R)*n): (1+(2+d+2*R)*n)], ncol = R)
   }
   
   if (est == "MAP") {
     nparam = length(theta)
-    sigma2_a = theta[nparam-2]
-    sigma2_b = theta[nparam-1]
-    sigma2_z = theta[nparam]
+    if (length(grep("poisson_", family)) > 0) {
+      sigma2_a = theta[nparam-4]
+      sigma2_b = theta[nparam-3]
+      sigma2_z = theta[nparam-2]
+      sigma2_u = theta[nparam-1]
+      sigma2_v = theta[nparam]
+    } else {
+      sigma2_a = theta[nparam-2]
+      sigma2_b = theta[nparam-1]
+      sigma2_z = theta[nparam]
+    }
   }
   
   #exact update conditioned on graph parameters
   if (est == "MAPe") {
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n*d2 + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n*d2 + 2 + prior.receiver.var)
+    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
+    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
     sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
+    if (length(grep("poisson_", family)) > 0) {
+      sigma2_u = (sum(u^2) + u.var.df*prior.sender.var^2) / (n*R + 2 + prior.u.var)
+      sigma2_v = (sum(v^2) + v.var.df*prior.v.var^2) / (n*R + 2 + prior.v.var)
+    }
   } 
 
   if (est == "MAPe") {est = "MAP"} # to evaluate likelihood correctly
   
   return(llik(Y=Y, sender = a, receiver = b, beta = B, Z = Z,
               sender.var = sigma2_a, receiver.var = sigma2_b,
-              Z.var = sigma2_z, family = family, est = est))
+              Z.var = sigma2_z, family = family, est = est, 
+              u = u, v = v, u.var = sigma2_u, v.var = sigma2_v))
 }
 
 #----------------------------------------------------------------------------------------------------
-# 2. approximate: llik_hat, llik2_hat  -----------------------------------------------------------------------------------------------
-#    add a constant to the data matrix (Y) if it has zeros (should be >=1 so no neg weights)
-#       this was found to be advantageous for residuals anyway
-#    faster to calculate dist (uses c) than call it pair by pair or do pair by pair in R. 
-#    long term can write rcpp function for just the distances of interest  
-#
-#    user rows or columans? do rows or columns in the data have noticeably higher variance?
-#----------------------------------------------------------------------------------------------------
-llik_hat <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
-                 Z=NULL, sender.var = 10, receiver.var = 10, Z.var = 10,
-                 beta.var = 9, sender.var.df = 3, receiver.var.df = 3, Z.var.df = NULL, #N = number of nodes
-                 prior.sender.var = 1, prior.receiver.var = 1, prior.Z.var = NULL,
-                 est = "MAP", family = "poisson",
-                 r = .25, rtype = "constant", Rmin = 5, replace = T, margin = "none", W = NULL) {
-  
-  if(is.null(Y)) {Y = object$model$Ym}
-  if(is.null(Z)) {Z = object$Z}
-  if(is.null(sender)) {sender = object$sender}
-  if(is.null(receiver)) {receiver = object$receiver}
-  if(is.null(beta)) {beta = object$beta}
-  N = nrow(Y) 
-  if(is.null(Z.var.df)) {Z.var.df = sqrt(N)}
-  if(is.null(prior.Z.var)) { prior.Z.var = N/8}
-  
-  if(!is.null(object$sender.var)) sender.var = object$sender.var
-  if(!is.null(object$receiver.var)) receiver.var = object$receiver.var
-  if(!is.null(object$Z.var)) Z.var = object$Z.var
-  if(!is.null(object$beta.var)) beta.var = object$beta.var
-  
-  # don't calculate whole z-dist matrix?:
-  # actually faster to (since it does it all in C with one call)
-  Z_dist = as.matrix(dist(Z, upper = T))
-  
-  # poisson by default
-  
-  # Sampling  -----
-  # Moved this outside so it doesn't have to be recalculated every time
-  # Y = Y + c # add a constant to Y if it has zeros (should be >=1 so no neg weights)
-  # diag(Y) = 0 # assume no self-loops
-  # lgamma.constant = sum(lgamma(as.vector(Y+1))) # constant for factorial term
-  # W = Y*(log(Y)-1)   
-  # diag(W) = 0
-  
-  # Number to sample
-  if (rtype == "constant") {R = rep(round((N-1)*r), N)} else {
-    R = Rmin + round(apply(Y, 1, var)/sum(apply(Y, 1, var)) * N * (r-Rmin))
-  }
-  
-  if (replace) { #hansen hurwitz only works with sampling by replacement
-    if (is.null(W)) { # do hansen hurwitz, weighted by Y -------
-      
-      if (margin == "row" | margin == "none") { # by row 
-        #assign(s, t(sapply(1:N, function(x){sample(N, size = R[x], replace = T, prob = Y[x,]) })))
-        pY_hat  = sapply(1:N, function(x){
-              s = sample(N, size = R[x], replace = T, prob = Yw[x,]) 
-              l_lambda = beta + sender[x]  + receiver[s] - Z_dist[x,s]
-              #Yw_row[x] * mean( (l_lambda - exp(l_lambda)/Y[x,s]) ) #y_i' = y_i/M_i = 
-              Yw_row[x] * mean( (Y[x,s]*l_lambda - exp(l_lambda))/Yw[x,s]) 
-              # unbiased estimator of variance
-              # (Yw_row[x]^2/(R[x]*(R[x]-1))) *sum( ( (Y[x,s]*l_lambda - exp(l_lambda))/Yw[x,s] - mean((Y[x,s]*l_lambda - exp(l_lambda))/Yw[x,s]))^2)
-              })
-        pY_hat = sum(pY_hat)  - lgamma.constant
-      }
-      
-      if (margin == "col" | margin == "none") { # by col
-        pY_hat_col  = sapply(1:N, function(x){
-             s = sample(N, size = R, replace = T, prob = Yw[,x]) 
-             l_lambda = beta + sender[s]  + receiver[x] - Z_dist[x,s]
-            
-             if( Yw_col[x] * mean( (Y[s,x]*l_lambda - exp(l_lambda))/Yw[s,x] )  < -1.153803e+30 ) {print("-inf")}
-             
-             Yw_col[x] * mean( (Y[s,x]*l_lambda - exp(l_lambda))/Yw[s,x] ) 
-             # unbiased estimator of variance
-             # (Yw_col[x]^2/(R[x]*(R[x]-1))) *sum( ( (Y[s,x]*l_lambda - exp(l_lambda))/Yw[s,x] - mean((Y[s,x]*l_lambda - exp(l_lambda))/Yw[s,x]))^2)
-             
-          })
-        pY_hat_col = sum(pY_hat_col)  - lgamma.constant
-      }
-  
-      if (margin == "col") {pY_hat = pY_hat_col}
-      if (margin == "none") {pY_hat = mean(pY_hat, pY_hat_col)}
-      
-    } else {
-      # hansen hurwitz, weighted by W  -------
-      
-      if (margin == "row" | margin == "none") {
-        pY_hat  = sapply(1:N, function(x){
-          s = sample(N, size = R, replace = T, prob = W[x,]) 
-          l_lambda = beta + sender[x]  + receiver[s] - Z_dist[x,s]
-          W_row[x] * mean( (Y[x,s]*l_lambda - exp(l_lambda))/W[x,s] ) #y_i' = y_i/M_i = 
-          #( 1/(R*(R-1)) ) * sum((( Y[x,s]*l_lambda - exp(l_lambda))/W[x,s] - 
-          #     W_row[x]*mean( (Y[x,s]*l_lambda - exp(l_lambda) )/W[x,s]) )^2) #variance
-        })
-        pY_hat = sum(pY_hat)  - lgamma.constant
-      }
-      
-      if (margin == "col" | margin == "none") {
-      
-      # by col
-        pY_hat_col  = sapply(1:N, function(x){
-          s = sample(N, size = R, replace = T, prob = W[,x]) 
-          l_lambda = beta + sender[s]  + receiver[x] - Z_dist[x,s]
-          W_col[x] * mean( (Y[s,x]*l_lambda - exp(l_lambda))/W[s,x] ) #y_i' = y_i/M_i = 
-          #( 1/(R*(R-1)) ) * sum((( Y[s,x]*l_lambda - exp(l_lambda))/W[s,x] - 
-          #     W_col[x]*mean( (Y[s,x]*l_lambda - exp(l_lambda) )/W[s,x]) )^2) #variance
-        })
-        pY_hat_col = sum(pY_hat_col)  - lgamma.constant
-      }
-      
-      if (margin == "col") {pY_hat = pY_hat_col}
-      if (margin == "none") {pY_hat = mean(pY_hat, pY_hat_col)}
-      
-    }
-  } 
-  
-  if (!replace) {
-    # ad hoc, without replacement, but slower? var estimate? ----
-    
-    # Y weights
-    if (margin == "row" | margin == "none") {
-      pY_hat  = sapply(1:N, function(x){
-        Rx = R[x]
-        s = sample(N, size = Rx, replace = F, prob = Y[x,]) 
-        l_lambda = beta + sender[x]  + receiver[s] - Z_dist[x,s]
-        Yw_row2 = Yw_row[x] - c(0,cumsum(Y[x,s[-Rx]]))
-        mean(Yw_row2 * (l_lambda - exp(l_lambda)/Y[x,s]) + c(0, cumsum(l_lambda[-Rx]*Y[x,s[-Rx]] - exp(l_lambda[-Rx]) ) ) )
-      })
-      pY_hat = sum(pY_hat)  - lgamma.constant
-    }
-    
-    if (margin == "col" | margin == "none") {
-      pY_hat_col  = sapply(1:N, function(x){
-        Rx = R[x]
-        s = sample(N, size = Rx, replace = F, prob = Y[,x]) 
-        l_lambda = beta + sender[s]  + receiver[x] - Z_dist[x,s]
-        Yw_col2 = Yw_col[x] - c(0,cumsum(Y[s[-Rx], x]))
-        mean(Yw_col2 * (l_lambda - exp(l_lambda)/Y[s,x]) + c(0, cumsum(l_lambda[-Rx]*Y[s[-Rx], x] - exp(l_lambda[-Rx]) ) ) )
-      })
-      pY_hat_col = sum(pY_hat_col)  - lgamma.constant
-    }
-    
-    if (margin == "col") {pY_hat = pY_hat_col}
-    if (margin == "none") {pY_hat = mean(pY_hat, pY_hat_col)}
-  }
-    
-  # add for binomial?
-  # return ----
-  if (est == "Y") {return(pY_hat)}
-  
-  ptheta = log(exp(-beta^2/(2*beta.var)) / sqrt(2*pi*beta.var)) +
-    sum(log(exp(-sender^2/(2*sender.var)) / sqrt(2*pi*sender.var))) + 
-    sum(log(exp(-receiver^2/(2*receiver.var)) / sqrt(2*pi*receiver.var))) +
-    sum(log(exp(-Z^2/(2*Z.var)) / sqrt(2*pi*Z.var))) +
-    log(dinvchisq(sender.var, sender.var.df, prior.sender.var)) + 
-    log(dinvchisq(receiver.var, receiver.var.df, prior.receiver.var)) + 
-    log(dinvchisq(Z.var, Z.var.df, prior.Z.var))
-  
-  if (est == "theta") {return(ptheta)}
-  
-  map = pY_hat + ptheta # = p(Y|theta) + p(theta)
-  
-  if (est == "MAP") {return(map)}
-  
-}
+# 2. gradient: llik_gr  --------------------------------------------------------------------
 
-
-#for using llik_hat with optim:
-llik_hat2 <- function(theta, Y, d, est = "Y", family = "poisson",
-                      r = .25, rtype = "constant", Rmin = 5, replace = T, margin = "none",  W = NULL ) {
-  
-  n=nrow(Y)
-  B = theta[1]
-  Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
-  a = theta[(2+d*n):(n+1+d*n)]
-  b = theta[(n+2+d*n):(2*n+1+d*n)]
-  
-  if (est == "MAP") {
-    sigma2_a = theta[2*n+2+d*n]
-    sigma2_b = theta[(2*n+3+d*n)]
-    sigma2_z = theta[(2*n+4+d*n)]
-  }
-  
-  if (est == "MAPe") {
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
-    sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
-  } 
-  
-  if (est == "MAPe") {est = "MAP"} # to evaluate likelihood correctly
-  
-  return(llik_hat(Y=Y, sender = a, receiver = b, beta = B, Z = Z, 
-                  sender.var = 1, receiver.var =1, Z.var = 1,
-                  family = family, est = est,
-                  r = r, rtype = rtype, replace = T, margin = margin, Rmin = Rmin, W = W)
-         )
-}
-
-
-#----------------------------------------------------------------------------------------------------
-# 3. gradient: llik_gr, llik_gr_hat -----------------------------------------------------------------------------------------------
-
-llik_gr <- function(theta, Y, d, est = "MAP", family = "poisson") {
+llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson") {
   
   n = nrow(Y)
+  
   B = theta[1]
   Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
   
+  a = theta[(2+d*n) : (1 + n+d*n)]
+  b = theta[(n+2+d*n) : (1+(2+d)*n)] 
+  u = v = sigma2_u = sigma2_v = NULL
   
-  if (family != "poisson_md") {
-    a = theta[(2+d*n) : (n+1+d*n)]
-    b = theta[(n+2+d*n) : (1+(2+d)*n)] 
-    d2 = 1
-  } else {
-    a = theta[(2+d*n) : (2*d*n + 1)] 
-    b = theta[(2*d*n + 2) : (3*d*n + 1)]  
-    d2 = d #assume directed and undirected effects have same dimension
+  if (family == "poisson_l" | family == "poisson_m") {
+    u = matrix(theta[(2+(2+d)*n) : (1+(2+d+R)*n)], ncol = R)
+    v = matrix(theta[(2+(2+d+R)*n): (1+(2+d+2*R)*n)], ncol = R)
   }
   
   if (est == "MAP") {
     nparam = length(theta)
-    sigma2_a = theta[nparam-2]
-    sigma2_b = theta[nparam-1]
-    sigma2_z = theta[nparam]
+    if (length(grep("poisson_", family)) > 0) {
+      sigma2_a = theta[nparam-4]
+      sigma2_b = theta[nparam-3]
+      sigma2_z = theta[nparam-2]
+      sigma2_u = theta[nparam-1]
+      sigma2_v = theta[nparam]
+    } else {
+      sigma2_a = theta[nparam-2]
+      sigma2_b = theta[nparam-1]
+      sigma2_z = theta[nparam]
+    }
   }
   
   #exact update of variance parameters conditioned on graph parameters
   if (est == "MAPe") {
     #optimal values
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n*d2 + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n*d2 + 2 + prior.receiver.var)
+    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
+    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
     sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
+    if (length(grep("poisson_", family)) > 0) {
+      sigma2_u = (sum(u^2) + u.var.df*prior.sender.var^2) / (n*R + 2 + prior.u.var)
+      sigma2_v = (sum(v^2) + v.var.df*prior.v.var^2) / (n*R + 2 + prior.v.var)
+    }
   }
   
-
-  #lambda = exp(t(b + t(a - Z_dist)) + B); diag(lambda) = 0
   Z_dist = dist2(Z)
-  lambda = exp(B + outer(a, b, "+") - Z_dist); diag(lambda) = 0 #slightly faster
-  da = rowSums(Y) - rowSums(lambda)
-  db = colSums(Y) - colSums(lambda)
+  dist_inv = 1/Z_dist; diag(dist_inv) = 0
   
-  #add sampling?
-  dist_inv = 1/Z_dist; diag(dist_inv) = rep(0, N) #term1 = cbind(term1, term1)
+  if (family == "poisson") {
+    lambda = exp(B + outer(a, b, "+") - Z_dist); diag(lambda) = 0
+    Y_l = Y - lambda
+    #dz:
+    tmp1 = (-Y_l - t(Y_l)) * dist_inv
+    zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))}) 
+    dz = as.vector(t( sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])})))
+  }
   
-  #multidimensional sender and receiver
+  if (family == "poisson_l") { 
+    u = c(u); v = c(v) #for outer
+    uv = outer(u, v, "+")
+    dist_inv1 = 1/(Z_dist + 1); diag(dist_inv1) = 0
+    lambda = exp(B + outer(a, b, "+") + uv*dist_inv1 - Z_dist); diag(lambda) = 0
+    Y_l = Y - lambda
+    #dz:
+    tmp1 = dist_inv * ( (1 + uv * dist_inv1^2)*(Y_l) + (1 + t(uv) * dist_inv1^2)*(t(Y_l)) )
+    zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))})
+    dz = as.vector(t( sapply(1:N, function(i) {colSums(tmp1[i,]*-zid_zjd[[i]])}))) 
+    tmp = dist_inv1*(Y_l)
+    du = rowSums(tmp)
+    dv = colSums(tmp)
+  }
+
+  if (family == "poisson_m") { 
+    lambda = exp(B + outer(a, b, "+") + u %*% t(v) - Z_dist); diag(lambda) = 0
+    Y_l = Y - lambda
+    #dz:
+    tmp1 = (-Y_l - t(Y_l)) * dist_inv 
+    zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))})
+    dz = as.vector(t( sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])})))
+    du = as.vector(sapply(1:R, function(i) {Y_l%*%v[,i]})) 
+    dv = as.vector(sapply(1:R, function(i) {t(Y_l)%*%u[,i]})) 
+  }
+
+  da = rowSums(Y_l)
+  db = colSums(Y_l)
+  dB = sum(da)
   
-  if (family != "poisson_md") {
-    
-    tmp1 = (Y + t(Y)) * dist_inv
-    tmp2 = dist_inv * (lambda + t(lambda))
-    zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))}) # N, N x d matrices
-    tmp3 = as.vector(t( sapply(1:N, function(i) {colSums(tmp2[i,]*zid_zjd[[i]])}) - #d x N -> N x d
-                          sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])}) ))#d x N -> N x d
-    
+  if (est == "MAP" | est == "MAPe") {
+    dB = dB - B/beta.var
+    dz = dz - as.vector(Z)/sigma2_z
+    da = da - a/sigma2_a
+    db = db - b/sigma2_b
+    if (family == "poisson_l" | family == "poisson_m") {
+      du = du - c(u)/sigma2_u
+      dv = dv - c(v)/sigma2_v
+    }
+  }
+
+  if (family == "poisson") {
     #return
-    if (est == "Y") {
-      return(c(sum(da), #sum(Y - lambda)
-           tmp3,
-           da,
-           db))
+    if (est == "Y" | est == "MAPe") {
+      return(c(dB, dz, da, db))
     }
   
     if (est == "MAP" ) {
     
-     return(c(-B/beta.var + sum(da), #sum(Y - lambda)
-             
-             tmp3 - as.vector(Z)/sigma2_z, # d x N
-             
-             da - a/sigma2_a,
-             
-             db - b/sigma2_b,
+     return(c(dB, dz, da, db,
              
              N*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
              
              N*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
              
              N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
-               (1 + Z.var.df/2)/sigma2_z)
-             
-           )
+               (1 + Z.var.df/2)/sigma2_z
+             ))
     }
-  
-    if (est == "MAPe") {
-      return(c(-B/beta.var + sum(da), #sum(Y - lambda)
-             
-             tmp3 - as.vector(Z)/sigma2_z, # d x N
-             
-             da - a/sigma2_a,
-             
-             db - b/sigma2_b)
-           )
+  }
+ 
+  if (family == "poisson_l" | family == "poisson_m") {
+    
+    if (est == "Y" | est == "MAPe") {
+      return(c(dB, dz, da, db, du, dv))
     }
-  } else {
     
-    sr = lapply(1:d2, function(x) {
-      outer(a[ (N*(x-1)+1) : (n*(x))], b[(n*(x-1)+1) : (n*(x))], "+")
-    })
-    zj_zi = lapply(1: d2, function(i) { t(outer(Z[,i], Z[,i], "-")) } )
-    sr_zj_zi = lapply(1: (d2), function(i) {sr[[i]] * zj_zi[[i]]})
-    
-    tmp5 = Reduce('+', sr_zj_zi)
-    l_lamdba = beta + tmp5/Z_dist - Z_dist
-    lambda = exp(l_lambda); diag(lambda) = 0
-    
-    zj_zi3 = lapply(zj_zi, function(x) {x*dist_inv^3})
-    tmp4 = Y - lambda
-  
-    dB = sum(tmp4)
-    da = unlist(lapply(zj_zi, function(x) {rowSums(Y*dist_inv*(x - lambda))}))
-    db = unlist(lapply(zj_zi, function(x) {colSums(Y*dist_inv*(x - lambda))}))
-    dz = unlist(lapply(sr, function(x) {  tmp = x*dist_inv*tmp4
-                                          return(rowSums(tmp) + colSums(tmp))  })) +
-         unlist(lapply(zj_zi3, function(x) { tmp = x * (tmp5+1)
-                                             return(rowSums(tmp) + colSums(tmp)) }))
-    
-      if (est == "Y") {
-       return(c(dB,
-                dz,
-                da,
-                 db))
-     } 
-    
-      if (est == "MAP" ) {
-         return(c(dB - B/beta.var,
-              dz - as.vector(Z)/sigma2_z,
-              da - a/sigma2_a,
-              db - b/sigma2_b,
-              
-              N*d2*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
-              
-              N*d2*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
-              
-              N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
-                (1 + Z.var.df/2)/sigma2_z)) 
-      }
-    
-      if (est == "MAPe" ) {
-            c(dB - B/beta.var,
-              dz - as.vector(Z)/sigma2_z,
-              da - a/sigma2_a,
-              db - b/sigma2_b)
-       }
+    if (est == "MAP" ) {
+      
+      return(c(dB, dz, da, db, du, dv,
+               
+               N*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
+               
+               N*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
+               
+               N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
+                 (1 + Z.var.df/2)/sigma2_z,
+               
+               N*R*pi*(1/(2*pi*sigma2_u)) + sum(u^2)/(2*sigma2_u^2) +  u.var.df*prior.u.var/(2*sigma2_u^2) - (1 + u.var.df/2)/sigma2_u,
+             
+               N*R*pi*(1/(2*pi*sigma2_v)) + sum(v^2)/(2*sigma2_v^2) +  v.var.df*prior.v.var/(2*sigma2_v^2) - (1 + v.var.df/2)/sigma2_v
+             ))
+    }
+  }
     
   }
-  
-  
-}
-# can we pass the same sample to the gradient function?
 
-llik_gr_hat <- function(theta, Y, d, est = "MAP",
-                        r = .25, rtype = "constant", Rmin = 5,
-                        replace = T, margin = "none", W = NULL ) {
-  
-  n = nrow(Y)
-  
-  B = theta[1]
-  Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
-  a = theta[(2+d*n):(n+1+d*n)]
-  b = theta[(n+2+d*n):(2*n+1+d*n)]
-  
-  if (est == "MAP") {
-    sigma2_a = theta[2*n+2+d*n]
-    sigma2_b = theta[(2*n+3+d*n)]
-    sigma2_z = theta[(2*n+4+d*n)]
-  }
-  
-  #exact update of variance parameters conditioned on graph parameters
-  if (est == "MAPe") {
-    #optimal values
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
-    sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
-  }
-  
-  #add sampling?
-  Z_dist = dist2(Z)
-  dist_inv = 1/Z_dist; diag(dist_inv) = rep(0, N) #term1 = cbind(term1, term1)
-  lambda = exp(t(b + t(a - Z_dist)) + B); diag(lambda) = 0
-  tmp1 = (Y + t(Y)) * dist_inv
-  tmp2 = dist_inv * (lambda + t(lambda))
-  zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))}) # N, N x d matrices
-  tmp3 = as.vector(t( sapply(1:N, function(i) {colSums(tmp2[i,]*zid_zjd[[i]])}) - #d x N -> N x d
-                        sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])}) ))#d x N -> N x d
-  
-  #return
-  if (est == "Y") {
-    return(c(sum(Y - lambda),
-             tmp3,
-             rowSums(Y) - rowSums(lambda),
-             colSums(Y) - colSums(lambda)))
-  }
-  
-  if (est == "MAP" ) {
-    return(c(-B/beta.var + sum(Y - lambda),
-             
-             tmp3 - as.vector(Z)/sigma2_z, # d x N
-             
-             rowSums(Y) - rowSums(lambda) - a/sigma2_a,
-             
-             colSums(Y) - colSums(lambda) - b/sigma2_b,
-             
-             N*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
-             
-             N*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
-             
-             N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) - (1 + Z.var.df/2)/sigma2_z)
-           
-    )
-  }
-  
-  if (est == "MAPe") {
-    return(c(-B/beta.var + sum(Y - lambda),
-             
-             tmp3 - as.vector(Z)/sigma2_z, # d x N
-             
-             rowSums(Y) - rowSums(lambda) - a/sigma2_a,
-             
-             colSums(Y) - colSums(lambda) - b/sigma2_b)
-    )
-  }
-  
-}
-
-# ------------------------------------------------------------------------------------------------
-# 4. NOTES --------------------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------
+# 3. NOTES --------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------
 #
 # other optimization methods
 #
