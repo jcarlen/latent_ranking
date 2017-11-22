@@ -34,7 +34,8 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
                  u = NULL, v = NULL,
                  u.var = 10, v.var = 10,
                  u.var.df = 3, v.var.df = 3,
-                 prior.u.var = 1, prior.v.var = 1
+                 prior.u.var = 1, prior.v.var = 1,
+                 p = 1 #power of decay distance
                  ) {
   
   if(is.null(Y)) {Y = object$model$Ym}
@@ -71,7 +72,7 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
 
   if (family == "poisson_l") { 
     if (ncol(u) == 1) {u = c(u); v = c(v)} #for outer
-    l_lambda = beta + outer(sender, receiver, "+") + outer(u, v, "+")/(Z_dist+1) - Z_dist
+    l_lambda = beta + outer(sender, receiver, "+") + outer(u, v, "+")/(Z_dist+1)^p - Z_dist
     lambda = exp(l_lambda); diag(lambda) = 0
     pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
   }
@@ -125,7 +126,7 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
 }
 
 #for using llik with optim:
-llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson") {
+llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) {
   
   n = nrow(Y)
   
@@ -172,13 +173,14 @@ llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson") {
   return(llik(Y=Y, sender = a, receiver = b, beta = B, Z = Z,
               sender.var = sigma2_a, receiver.var = sigma2_b,
               Z.var = sigma2_z, family = family, est = est, 
-              u = u, v = v, u.var = sigma2_u, v.var = sigma2_v))
+              u = u, v = v, u.var = sigma2_u, v.var = sigma2_v,
+              p = p))
 }
 
 #----------------------------------------------------------------------------------------------------
 # 2. gradient: llik_gr  --------------------------------------------------------------------
 
-llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson") {
+llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) {
   
   n = nrow(Y)
   
@@ -240,10 +242,10 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson") {
     lambda = exp(B + outer(a, b, "+") + uv*dist_inv1 - Z_dist); diag(lambda) = 0
     Y_l = Y - lambda
     #dz:
-    tmp1 = dist_inv * ( (1 + uv * dist_inv1^2)*(Y_l) + (1 + t(uv) * dist_inv1^2)*(t(Y_l)) )
+    tmp1 = dist_inv * ( (1 + uv * dist_inv1^(p+1))*(Y_l) + (1 + t(uv) * dist_inv1^(p+1))*(t(Y_l)) )
     zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))})
     dz = as.vector(t( sapply(1:N, function(i) {colSums(tmp1[i,]*-zid_zjd[[i]])}))) 
-    tmp = dist_inv1*(Y_l)
+    tmp = (dist_inv1^p)*(Y_l)
     du = rowSums(tmp)
     dv = colSums(tmp)
   }
