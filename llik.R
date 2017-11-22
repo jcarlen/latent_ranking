@@ -239,7 +239,7 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
     u = c(u); v = c(v) #for outer
     uv = outer(u, v, "+")
     dist_inv1 = 1/(Z_dist + 1); diag(dist_inv1) = 0
-    lambda = exp(B + outer(a, b, "+") + uv*dist_inv1 - Z_dist); diag(lambda) = 0
+    lambda = exp(B + outer(a, b, "+") + uv*dist_inv1^p - Z_dist); diag(lambda) = 0
     Y_l = Y - lambda
     #dz:
     tmp1 = dist_inv * ( (1 + uv * dist_inv1^(p+1))*(Y_l) + (1 + t(uv) * dist_inv1^(p+1))*(t(Y_l)) )
