@@ -39,7 +39,9 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
                  ) {
   
   if(is.null(Y)) {Y = object$model$Ym}
-  if(is.null(Z)) {Z = object$Z}
+  if(is.null(Z)) {
+    if (!is.null(object$Z)) {Z = object$Z} else {Z = 0} #poisson_m, d = 0 model
+  }
   if(is.null(sender)) {sender = object$sender}
   if(is.null(receiver)) {receiver = object$receiver}
   if(is.null(beta)) {beta = object$beta}
@@ -53,6 +55,8 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
   if(!is.null(object$beta.var)) beta.var = object$beta.var
   
   Z_dist = as.matrix(dist(Z, upper = T))
+  
+  if (length(Z) == 1) {Z.var = 1/(2*pi); Z_dist = 0} #poisson_m, d = 0 model, for later calculation
 
   if (family == "poisson") {
     #l_lambda = t(receiver + t(sender - Z_dist)) + beta;
@@ -71,7 +75,7 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
   }   
 
   if (family == "poisson_l") { 
-    if (ncol(u) == 1) {u = c(u); v = c(v)} #for outer
+    if (!is.null(dim(u)) && ncol(u) == 1) {u = c(u); v = c(v)} #for outer
     l_lambda = beta + outer(sender, receiver, "+") + outer(u, v, "+")/(Z_dist+1)^p - Z_dist
     lambda = exp(l_lambda); diag(lambda) = 0
     pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
@@ -131,7 +135,13 @@ llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) {
   n = nrow(Y)
   
   B = theta[1]
-  Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
+  #Z
+  if (d > 0) {
+    Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
+  } else {
+    Z = NULL
+    sigma2_z = NULL
+  }
   
   a = theta[(2+d*n) : (1 + n+d*n)]
   b = theta[(n+2+d*n) : (1+(2+d)*n)] 
@@ -145,11 +155,18 @@ llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) {
   if (est == "MAP") {
     nparam = length(theta)
     if (length(grep("poisson_", family)) > 0) {
+      if (d > 0) {
       sigma2_a = theta[nparam-4]
       sigma2_b = theta[nparam-3]
       sigma2_z = theta[nparam-2]
       sigma2_u = theta[nparam-1]
       sigma2_v = theta[nparam]
+      } else {
+        sigma2_a = theta[nparam-3]
+        sigma2_b = theta[nparam-2]
+        sigma2_u = theta[nparam-1]
+        sigma2_v = theta[nparam] 
+      }
     } else {
       sigma2_a = theta[nparam-2]
       sigma2_b = theta[nparam-1]
@@ -161,7 +178,7 @@ llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) {
   if (est == "MAPe") {
     sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
     sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
-    sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
+    if (d > 0) {sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)}
     if (length(grep("poisson_", family)) > 0) {
       sigma2_u = (sum(u^2) + u.var.df*prior.sender.var^2) / (n*R + 2 + prior.u.var)
       sigma2_v = (sum(v^2) + v.var.df*prior.v.var^2) / (n*R + 2 + prior.v.var)
@@ -185,8 +202,18 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
   n = nrow(Y)
   
   B = theta[1]
-  Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
-  
+  #Z:
+  if (d > 0) {
+    Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
+    Z_dist = dist2(Z)
+    dist_inv = 1/Z_dist; diag(dist_inv) = 0
+  } else {
+    Z = NULL
+    sigma2_z = NULL
+    dz = NULL
+    Z_dist = 0
+  }
+
   a = theta[(2+d*n) : (1 + n+d*n)]
   b = theta[(n+2+d*n) : (1+(2+d)*n)] 
   u = v = sigma2_u = sigma2_v = NULL
@@ -199,11 +226,18 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
   if (est == "MAP") {
     nparam = length(theta)
     if (length(grep("poisson_", family)) > 0) {
-      sigma2_a = theta[nparam-4]
-      sigma2_b = theta[nparam-3]
-      sigma2_z = theta[nparam-2]
-      sigma2_u = theta[nparam-1]
-      sigma2_v = theta[nparam]
+      if (d > 0) {
+        sigma2_a = theta[nparam-4]
+        sigma2_b = theta[nparam-3]
+        sigma2_z = theta[nparam-2]
+        sigma2_u = theta[nparam-1]
+        sigma2_v = theta[nparam]
+      } else {
+        sigma2_a = theta[nparam-3]
+        sigma2_b = theta[nparam-2]
+        sigma2_u = theta[nparam-1]
+        sigma2_v = theta[nparam] 
+      }
     } else {
       sigma2_a = theta[nparam-2]
       sigma2_b = theta[nparam-1]
@@ -216,15 +250,12 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
     #optimal values
     sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
     sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
-    sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)
+    if (d > 0) {sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)}
     if (length(grep("poisson_", family)) > 0) {
       sigma2_u = (sum(u^2) + u.var.df*prior.sender.var^2) / (n*R + 2 + prior.u.var)
       sigma2_v = (sum(v^2) + v.var.df*prior.v.var^2) / (n*R + 2 + prior.v.var)
     }
   }
-  
-  Z_dist = dist2(Z)
-  dist_inv = 1/Z_dist; diag(dist_inv) = 0
   
   if (family == "poisson") {
     lambda = exp(B + outer(a, b, "+") - Z_dist); diag(lambda) = 0
@@ -252,11 +283,15 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
 
   if (family == "poisson_m") { 
     lambda = exp(B + outer(a, b, "+") + u %*% t(v) - Z_dist); diag(lambda) = 0
+    #hist(range(outer(a, b, "+") - Z_dist), breaks = 20) # evidence of collinearity
+    #hist(range(outer(a, b, "+") + Z_dist), breaks = 20) # evidence of collinearity
     Y_l = Y - lambda
     #dz:
-    tmp1 = (-Y_l - t(Y_l)) * dist_inv 
-    zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))})
-    dz = as.vector(t( sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])})))
+    if (d > 0) {
+      tmp1 = (-Y_l - t(Y_l)) * dist_inv 
+      zid_zjd = lapply(1:N, function(x) {t(Z[x,] - t(Z))})
+      dz = as.vector(t( sapply(1:N, function(i) {colSums(tmp1[i,]*zid_zjd[[i]])})))
+    }
     du = as.vector(sapply(1:R, function(i) {Y_l%*%v[,i]})) 
     dv = as.vector(sapply(1:R, function(i) {t(Y_l)%*%u[,i]})) 
   }
@@ -267,7 +302,7 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
   
   if (est == "MAP" | est == "MAPe") {
     dB = dB - B/beta.var
-    dz = dz - as.vector(Z)/sigma2_z
+    if (d > 0) {dz = dz - as.vector(Z)/sigma2_z}
     da = da - a/sigma2_a
     db = db - b/sigma2_b
     if (family == "poisson_l" | family == "poisson_m") {
@@ -304,14 +339,16 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
     
     if (est == "MAP" ) {
       
+      if (d > 0) {dsigma2_z = N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
+        (1 + Z.var.df/2)/sigma2_z} else {dsigma2_z = NULL}
+      
       return(c(dB, dz, da, db, du, dv,
                
                N*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
                
                N*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
                
-               N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
-                 (1 + Z.var.df/2)/sigma2_z,
+               dsigma2_z,
                
                N*R*pi*(1/(2*pi*sigma2_u)) + sum(u^2)/(2*sigma2_u^2) +  u.var.df*prior.u.var/(2*sigma2_u^2) - (1 + u.var.df/2)/sigma2_u,
              
