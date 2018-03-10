@@ -274,7 +274,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
     Z_dist = as.matrix(dist(Z, upper = T))
   
     # sigma2_z ####
-    sigma2_z = (sum(z^2) + v_z*s2_z^2) / (N*d + 2 + v_z) #z has length N*d
+    sigma2_z = (sum(z^2) + v_z*s2_z) / (N*d + 2 + v_z) #z has length N*d
   
     #B: ####
     stepsize.B = stepsize.init.B
@@ -340,7 +340,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
     }
     
     #sigma2_a ####
-    sigma2_a = (sum(a^2) + v_a*s2_a^2) / (N + 2 + v_a)
+    sigma2_a = (sum(a^2) + v_a*s2_a) / (N + 2 + v_a)
     
     # b ####
     #init
@@ -376,7 +376,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
     }
     
     # sigma2_b ####
-    sigma2_b = (sum(b^2) + v_b*s2_b^2) / (N + 2 + v_b)
+    sigma2_b = (sum(b^2) + v_b*s2_b) / (N + 2 + v_b)
     
     # likelihood ####
     currentllik = llik(Y=Y, sender = a, receiver = b, beta = B, Z = t(z), sender.var = sigma2_a,

@@ -228,10 +228,10 @@ sigma2_b = var(b)
 B = 0 #intercept
 
 llik2 <- function(theta, Y, d, n=nrow(Y), family = "poisson", est = "MAP") {
-  a = theta[1:n]
-  b = theta[(n+1):(2*n)]
-  B = theta[(2*n+1)]
-  Z = matrix(theta[(2*n+2):(2*n+1+d*n)], ncol = d, nrow = n)
+  B = theta[1]
+  Z = matrix(theta[2:(1+d*n)], ncol = d, nrow = n)
+  a = theta[(2+d*n):(n+1+d*n)]
+  b = theta[(n+2+d*n):(2*n+1+d*n)]
   sigma2_a = theta[2*n+2+d*n]
   sigma2_b = theta[(2*n+3+d*n)]
   sigma2_z = theta[(2*n+4+d*n)]
@@ -240,22 +240,22 @@ llik2 <- function(theta, Y, d, n=nrow(Y), family = "poisson", est = "MAP") {
               Z.var = sigma2_z, family = family, est = est))
 }
 
-llik2(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z), Y, d = 2)
+llik2(c(B, Z, a, b, sigma2_a, sigma2_b, sigma2_z), Y, d = 2)
 #other optimization methods:
 
 # i checked that this high enough enough maxit
 # standard random normal initiation better than latentnet type
 # now optim method is implemented in ergmm so any of these
 #  methods can be used
-theta.sann = optim(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z),
+theta.sann = optim(c(B, Z, a, b,  sigma2_a, sigma2_b, sigma2_z),
                    Y = Y, d = 2, llik2, method = "SANN",
                    lower = c(rep(-Inf, 189), 0, 0, 0),
                    control=list(maxit = 200, fnscale = -1))
-theta.cg = optim(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z),
+theta.cg = optim(c(B, Z, a, b, sigma2_a, sigma2_b, sigma2_z),
                  Y = Y, d = 2, llik2, method = "CG",
                  lower = c(rep(-Inf, 189), 0, 0, 0),
                  control=list(maxit = 200, fnscale = -1))
-theta.bfgs = optim(c(a, b, B, Z, sigma2_a, sigma2_b, sigma2_z),
+theta.bfgs = optim(c(B, Z, a, b,sigma2_a, sigma2_b, sigma2_z),
                    Y = Y, d = 2, llik2, method = "BFGS",
                    #lower = c(rep(-Inf, 189), 0, 0, 0),
                    control=list(maxit = 200, fnscale = -1))

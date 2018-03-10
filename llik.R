@@ -20,7 +20,7 @@ library(gtools) #for logit function
 # 1. likelihood: llik, llik2 ----------------------------------------------------------------------------------------------------
 #   assumes no self loops
 #   (for weighting?) add a constant to the data matrix (Y) if it has zeros (should be >=1 so no neg weights)
-#       this was found to be advantageous for residuals anyway
+#       this was found to be somewheat advantageous for residuals (but blurred positions)
 #       BUT it seems to compromise the separation of clusters
 #   faster to calculate dist (uses c) than call it pair by pair or do pair by pair in R. 
 #   long term can write rcpp function for just the distances of interest  
@@ -75,6 +75,7 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
   }   
 
   if (family == "poisson_l") { 
+    lgamma.constant = sum(lgamma(as.vector(Y+1)), na.rm = T) 
     if (!is.null(dim(u)) && ncol(u) == 1) {u = c(u); v = c(v)} #for outer
     l_lambda = beta + outer(sender, receiver, "+") + outer(u, v, "+")/(Z_dist+1)^p - Z_dist
     lambda = exp(l_lambda); diag(lambda) = 0
@@ -83,6 +84,7 @@ llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
   
   #poisson, multiplicative random effects
   if (family == "poisson_m") { 
+    lgamma.constant = sum(lgamma(as.vector(Y+1)), na.rm = T) 
     l_lambda = beta + outer(sender, receiver, "+") + u %*% t(v) - Z_dist
     lambda = exp(l_lambda); diag(lambda) = 0
     pY = sum( Y * l_lambda - lambda, na.rm = T) - lgamma.constant
@@ -176,9 +178,9 @@ llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) {
   
   #exact update conditioned on graph parameters
   if (est == "MAPe") {
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
-    if (d > 0) {sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)}
+    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var) / (n + 2 + prior.sender.var) #don't square prior.sender.var! it's already squared duh.
+    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var) / (n + 2 + prior.receiver.var)
+    if (d > 0) {sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var) / (n*d + 2 + prior.Z.var)}
     if (length(grep("poisson_", family)) > 0) {
       sigma2_u = (sum(u^2) + u.var.df*prior.sender.var^2) / (n*R + 2 + prior.u.var)
       sigma2_v = (sum(v^2) + v.var.df*prior.v.var^2) / (n*R + 2 + prior.v.var)
