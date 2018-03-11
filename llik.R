@@ -182,8 +182,8 @@ llik2 <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) {
     sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var) / (n + 2 + prior.receiver.var)
     if (d > 0) {sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var) / (n*d + 2 + prior.Z.var)}
     if (length(grep("poisson_", family)) > 0) {
-      sigma2_u = (sum(u^2) + u.var.df*prior.sender.var^2) / (n*R + 2 + prior.u.var)
-      sigma2_v = (sum(v^2) + v.var.df*prior.v.var^2) / (n*R + 2 + prior.v.var)
+      sigma2_u = (sum(u^2) + u.var.df*prior.sender.var) / (n*R + 2 + prior.u.var)
+      sigma2_v = (sum(v^2) + v.var.df*prior.v.var) / (n*R + 2 + prior.v.var)
     }
   } 
 
@@ -250,12 +250,12 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
   #exact update of variance parameters conditioned on graph parameters
   if (est == "MAPe") {
     #optimal values
-    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var^2) / (n + 2 + prior.sender.var)
-    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var^2) / (n + 2 + prior.receiver.var)
-    if (d > 0) {sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var^2) / (n*d + 2 + prior.Z.var)}
+    sigma2_a = (sum(a^2) + sender.var.df*prior.sender.var) / (n + 2 + prior.sender.var)
+    sigma2_b = (sum(b^2) + receiver.var.df*prior.receiver.var) / (n + 2 + prior.receiver.var)
+    if (d > 0) {sigma2_z = (sum(Z^2) + Z.var.df*prior.Z.var) / (n*d + 2 + prior.Z.var)}
     if (length(grep("poisson_", family)) > 0) {
-      sigma2_u = (sum(u^2) + u.var.df*prior.sender.var^2) / (n*R + 2 + prior.u.var)
-      sigma2_v = (sum(v^2) + v.var.df*prior.v.var^2) / (n*R + 2 + prior.v.var)
+      sigma2_u = (sum(u^2) + u.var.df*prior.sender.var) / (n*R + 2 + prior.u.var)
+      sigma2_v = (sum(v^2) + v.var.df*prior.v.var) / (n*R + 2 + prior.v.var)
     }
   }
   
@@ -323,11 +323,12 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
     
      return(c(dB, dz, da, db,
              
-             N*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
+              #pis in first term cancelled
+             -N/(2*sigma2_a) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
              
-             N*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
+             -N/(2*sigma2_b) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
              
-             N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
+             -N*d/(2*sigma2_z) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
                (1 + Z.var.df/2)/sigma2_z
              ))
     }
@@ -341,20 +342,20 @@ llik_gr <- function(theta, Y, d, R = 1, est = "MAP", family = "poisson", p = 1) 
     
     if (est == "MAP" ) {
       
-      if (d > 0) {dsigma2_z = N*d*pi*(1/(2*pi*sigma2_z)) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
+      if (d > 0) {dsigma2_z = -N*d/(2*sigma2_z) + sum(Z^2)/(2*sigma2_z^2) + Z.var.df*prior.Z.var/(2*sigma2_z^2) -
         (1 + Z.var.df/2)/sigma2_z} else {dsigma2_z = NULL}
       
       return(c(dB, dz, da, db, du, dv,
                
-               N*pi*(1/(2*pi*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
+               -N*(1/(2*sigma2_a)) + sum(a^2)/(2*sigma2_a^2) +  sender.var.df*prior.sender.var/(2*sigma2_a^2) - (1 + sender.var.df/2)/sigma2_a,
                
-               N*pi*(1/(2*pi*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
+               -N*(1/(2*sigma2_b)) + sum(b^2)/(2*sigma2_b^2) +  receiver.var.df*prior.receiver.var/(2*sigma2_b^2) - (1 + receiver.var.df/2)/sigma2_b,
                
                dsigma2_z,
                
-               N*R*pi*(1/(2*pi*sigma2_u)) + sum(u^2)/(2*sigma2_u^2) +  u.var.df*prior.u.var/(2*sigma2_u^2) - (1 + u.var.df/2)/sigma2_u,
+               -N*R*(1/(2*sigma2_u)) + sum(u^2)/(2*sigma2_u^2) +  u.var.df*prior.u.var/(2*sigma2_u^2) - (1 + u.var.df/2)/sigma2_u,
              
-               N*R*pi*(1/(2*pi*sigma2_v)) + sum(v^2)/(2*sigma2_v^2) +  v.var.df*prior.v.var/(2*sigma2_v^2) - (1 + v.var.df/2)/sigma2_v
+               -N*R*(1/(2*sigma2_v)) + sum(v^2)/(2*sigma2_v^2) +  v.var.df*prior.v.var/(2*sigma2_v^2) - (1 + v.var.df/2)/sigma2_v
              ))
     }
   }
