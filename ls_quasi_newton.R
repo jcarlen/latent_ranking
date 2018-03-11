@@ -1,4 +1,6 @@
 # quick quasi-Newton for Latent Space Ranking Model
+# no longer using this algo for estimation (b/cworse than optim's)
+# but still using the predict.lsqn function at the bottom for prediction based on params
 #
 # make sure diag of Y is 0 if not counting self-edges
 #
@@ -23,15 +25,18 @@ library(latentnet)
 library(geoR) # for divnchisq
 library(gtools) #for logit function
 
-# log-likelihood function: ####
+
+#Source the new llik function(s)
+source("~/Documents/citation/latent_ranking/latent_ranking_repo/llik.R")
+
+# This is the OLD log-likelihood function: ####
 #    if est is "MAP" return l(Y|theta) + l(theta) ; if "Y" return l(Y|theta) ; if "theta" return l(theta)
 #    if object has parameter values they will be used (not including hyperparameters)
 #    family = poisson fits the normal poisson latent space model
 #    family = binomial fits a quasi-Stiglery (quasi-symmetric) type model with positions -- off by a constant
 #    [removed] family = poisson.c fits a constricted poisson position model (T_ij = ~Y_ij + ~Y_ji) by fitting upper tri and letting lower tri be the remainder. Note this is odd because it doesn't demand that E(Cij) = T - E(Cji) given the parameters (positions + random effects + intercept), just that E(C_ji) is a reminder not a glm prediction. This also means the last sender param has no info.  
 #              better way to do this with penalty for missing the total instread of sharp constraint (which probably can't be realized )]
-
-llik <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
+llik_old <- function(object=NULL, Y=NULL, sender=NULL, receiver=NULL, beta=NULL,
                  Z=NULL, sender.var = 10, receiver.var = 10, Z.var = 10,
                  beta.var = 9, sender.var.df = 3, receiver.var.df = 3, Z.var.df = NULL, #N = number of nodes
                  prior.sender.var = 1, prior.receiver.var = 1, prior.Z.var = NULL,
@@ -410,7 +415,7 @@ lsqn <- function(Y, N=nrow(Y), D = 2, runs = 10, tol = .01, #Y is graph, N = num
       )
 }
 
-
+# quasi-Netwon prediction ####
 # predict network based on quasi-Newton fit
 # either based on point estimate (non-random) or random draw|MAP
 predict.lsqn <-function(model, type = "Y", names = NULL) {
