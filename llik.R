@@ -1,4 +1,4 @@
-# Helper likelihood function for latent space rating
+# Helper likelihood calculation function for latent space rating
 #
 #    Diag of network matrix representation should be 0 if not counting self-edges (!)
 #
@@ -19,9 +19,9 @@ library(gtools) #for logit function
 #----------------------------------------------------------------------------------------------------
 # 1. likelihood: llik, llik2 ----------------------------------------------------------------------------------------------------
 #   assumes no self loops
-#   (for weighting?) add a constant to the data matrix (Y) if it has zeros (should be >=1 so no neg weights)
-#       this was found to be somewheat advantageous for residuals (but blurred positions)
-#       BUT it seems to compromise the separation of clusters
+#   can add a constant to the data matrix (Y) if it has zeros (should be >=1 so no neg weights)
+#       this was found to be somewheat advantageous for residuals BUT
+#       blurred positions and compromised the separation of clusters
 #   faster to calculate dist (uses c) than call it pair by pair or do pair by pair in R. 
 #   long term can write rcpp function for just the distances of interest  
 #   do rows or columns in the data have noticeably higher variance?
