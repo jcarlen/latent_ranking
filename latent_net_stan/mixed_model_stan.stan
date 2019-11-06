@@ -42,41 +42,58 @@ data {
   int<lower=1,upper=2>dist; // 1 is euclidean, 2 is squared euclidean
 }
 
+transformed data {
+  int N2 = N - zero_constraint;
+}
+
 // The parameters accepted by the model. Our model
 // accepts two parameters 'mu' and 'sigma'.
 parameters {
   real beta0; //intercept,if present
-  real sender[N - zero_constraint];
-  real receiver[N - zero_constraint];
-  //vector[D] Z[N];
+  real sender[N2];
+  real receiver[N2];
+  vector[D] Z[N2];
 }
 
 transformed parameters {
   
   real lambda[N*N] = rep_array(0.0, N*N);
-  //vector[D] Z[N] = rZ;
   
   // Calculate lambda
   for (i in 1:N) { 
     for (j in 1:N) { 
       
-      if ( i != 1 || !zero_constraint) {
-        lambda[(i-1)*N + j] =  sender[i - zero_constraint];
-      } 
-      
-      if ( j != 1 || !zero_constraint) {
-        lambda[(i-1)*N + j] +=  receiver[i - zero_constraint];
-      }
-
       if (intercept) {
         lambda[(i-1)*N + j] += beta0; 
       }
-      //if (dist == 1) { //eucliden
-      //  lambda[(i-1)*N + j] +=  -distance(Z[i], Z[j]);
-      //}
-      //if (dist == 2) { //eucliden squared
-      //  lambda[(i-1)*N + j] +=  -squared_distance(Z[i], Z[j]);
-      //}
+      
+      if (!zero_constraint) {
+         lambda[(i-1)*N + j] +=  sender[i] + receiver[j];
+      } else {
+          if (i != 1) { lambda[(i-1)*N + j] +=  sender[i - zero_constraint];}
+          if (j != 1) { lambda[(i-1)*N + j] +=  receiver[j - zero_constraint];}
+      }
+
+
+      if (dist == 1) { //euclidean
+        if (!zero_constraint) {
+          lambda[(i-1)*N + j] +=  -distance(Z[i], Z[j]);
+        } else {
+          if (i == 1 && j !=1) { lambda[(i-1)*N + j] +=  -distance(rep_vector(0.0, D), Z[j - zero_constraint]);}
+          if (i != 1 && j ==1) { lambda[(i-1)*N + j] +=  -distance(Z[i - zero_constraint], rep_vector(0.0, D));}
+          // if i and j both 0 distance is zero
+        }
+      }
+      
+      if (dist == 2) { //squared eucliden
+        if (!zero_constraint) {
+          lambda[(i-1)*N + j] +=  -squared_distance(Z[i], Z[j]);
+        } else {
+          if (i == 1 && j !=1) { lambda[(i-1)*N + j] +=  -squared_distance(rep_vector(0.0, D), Z[j - zero_constraint]);}
+          if (i != 1 && j ==1) { lambda[(i-1)*N + j] +=  -squared_distance(Z[i - zero_constraint], rep_vector(0.0, D));}
+          // if i and j both 0 distance is zero
+        }
+      }
       
       lambda[(i-1)*N + j] = exp(lambda[(i-1)*N + j]);
       //add in covariates
@@ -88,11 +105,11 @@ transformed parameters {
 
 model {
   if (intercept) { beta0 ~ normal_lpdf(0, sigma_beta0); }
-  sender ~ normal_lpdf(0, sigma_a);
-  receiver ~ normal_lpdf(0, sigma_b);
-  //for (i in 1:N) {
-    //Z[i] ~ normal_lpdf(0, sigma_z);
-  //}
+  sender ~ normal_lpdf(mu_a, sigma_a);
+  receiver ~ normal_lpdf(mu_b, sigma_b);
+  for (i in 1:N2) {
+    Z[i] ~ normal_lpdf(0, sigma_z);
+  }
   
   Y ~ poisson_lpmf(lambda);
   
