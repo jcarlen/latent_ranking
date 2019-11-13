@@ -32,27 +32,34 @@ data {
   //int<lower=0> R; //latent assymmetric dimensions
   //int<lower=0> p; //number of covariates, including intercept
   int Y[N*N]; //observed edges, as vector
-  real<lower=0> sigma_a; //prior sd of sender
-  real<lower=0> sigma_b; //prior sd of receiver 
-  real<lower=0> sigma_z; //prior sd of position
   real<lower=0> sigma_beta0; //prior sd of intercept
   int<lower=0,upper=1>intercept; //prior sd of position
-  int<lower=0,upper=1>zero_constraint;
+  int<lower=0,upper=1>zero_constraint; // let sender_1 = 0, receiver_1 = 0
+  int<lower=0,upper=1>pos_constraint; // let 1st - Dth positions be on primary axes?
   int<lower=0,upper=1>self_edges; 
   int<lower=1,upper=2>dist; // 1 is euclidean, 2 is squared euclidean
 }
 
 transformed data {
-  int N2 = N - zero_constraint;
+  int N_0 = N - zero_constraint;
+  int N_Z = N - pos_constraint*D;
 }
 
 // The parameters accepted by the model. Our model
 // accepts two parameters 'mu' and 'sigma'.
 parameters {
   real beta0; //intercept,if present
-  real sender[N2];
-  real receiver[N2];
-  vector[D] Z[N2];
+  real sender[N_0];
+  real receiver[N_0];
+  vector[D] Z[N_Z]; //array of size N_Z, contaning vectors with D elements
+  real<lower=0> Z_constrained[D*pos_constraint];
+  real mu_sender;
+  real mu_receiver;
+  real mu_Z[D];
+  real<lower=0> sigma_sender; //prior sd of sender
+  real<lower=0> sigma_receiver; //prior sd of receiver 
+  real<lower=0> sigma_z; //prior sd of position
+  
 }
 
 transformed parameters {
@@ -76,27 +83,54 @@ transformed parameters {
 
 
       if (dist == 1) { //euclidean
-        if (!zero_constraint) {
+        if (!pos_constraint) {
           lambda[(i-1)*N + j] +=  -distance(Z[i], Z[j]);
         } else {
-          if (i == 1 && j !=1) { lambda[(i-1)*N + j] +=  -distance(rep_vector(0.0, D), Z[j - zero_constraint]);}
-          if (i != 1 && j ==1) { lambda[(i-1)*N + j] +=  -distance(Z[i - zero_constraint], rep_vector(0.0, D));}
-          // if i and j both 0 distance is zero
+          
+          if (i <= D && j > D) {
+            vector[D] fixed = rep_vector(0.0, D);
+            fixed[i] = Z_constrained[i];
+            lambda[(i-1)*N + j] +=  -distance(fixed, Z[j - D]);
+          }
+          
+          if (j <= D && i > D) {
+            vector[D] fixed = rep_vector(0.0, D);
+            fixed[j] = Z_constrained[j];
+            lambda[(i-1)*N + j] +=  -distance(fixed, Z[i - D]);
+          }
+            
+          if (i <= D && j <= D) {
+            lambda[(i-1)*N + j] += -distance([0,Z_constrained[j]], [Z_constrained[i],0]);  
+          }
         }
       }
-      
-      if (dist == 2) { //squared eucliden
-        if (!zero_constraint) {
+
+        
+      if (dist == 2) { //squared
+        if (!pos_constraint) {
           lambda[(i-1)*N + j] +=  -squared_distance(Z[i], Z[j]);
         } else {
-          if (i == 1 && j !=1) { lambda[(i-1)*N + j] +=  -squared_distance(rep_vector(0.0, D), Z[j - zero_constraint]);}
-          if (i != 1 && j ==1) { lambda[(i-1)*N + j] +=  -squared_distance(Z[i - zero_constraint], rep_vector(0.0, D));}
-          // if i and j both 0 distance is zero
+          
+          if (i <= D && j > D) {
+            vector[D] fixed = rep_vector(0.0, D);
+            fixed[i] = Z_constrained[i];
+            lambda[(i-1)*N + j] +=  -squared_distance(fixed, Z[j - D]);
+          }
+          
+          if (j <= D && i > D) {
+            vector[D] fixed = rep_vector(0.0, D);
+            fixed[j] = Z_constrained[j];
+            lambda[(i-1)*N + j] +=  -squared_distance(fixed, Z[i - D]);
+          }
+            
+          if (i <= D && j <= D) {
+            lambda[(i-1)*N + j] += -squared_distance([0,Z_constrained[j]], [Z_constrained[i],0]);  
+          }
         }
       }
       
       lambda[(i-1)*N + j] = exp(lambda[(i-1)*N + j]);
-      //add in covariates
+      
     }
   }
   
@@ -104,14 +138,31 @@ transformed parameters {
 
 
 model {
+  
+  sigma_sender ~ scaled_inv_chi_square_lpdf(3,1); //prior sd of sender
+  sigma_receiver ~ scaled_inv_chi_square_lpdf(3,1); //prior sd of receiver 
+  sigma_z ~ scaled_inv_chi_square_lpdf(sqrt(N),N/8); //prior sd of receiver 
+  
+  mu_sender ~ normal(0, 3);
+  mu_receiver ~ normal(0, 3);
+  mu_Z ~ normal(0,2);
+  
   if (intercept) { beta0 ~ normal_lpdf(0, sigma_beta0); }
-  sender ~ normal_lpdf(mu_a, sigma_a);
-  receiver ~ normal_lpdf(mu_b, sigma_b);
-  for (i in 1:N2) {
-    Z[i] ~ normal_lpdf(0, sigma_z);
+  sender ~ normal_lpdf(mu_sender, sigma_sender);
+  receiver ~ normal_lpdf(mu_receiver, sigma_receiver);
+  
+  for (i in 1:N) {
+    if (pos_constraint && i <= D) {
+      Z_constrained[i] ~ normal(0, sigma_z);
+    } else {
+      Z[i - pos_constraint*D] ~ normal_lpdf(mu_Z, sigma_z);
+    }
   }
   
   Y ~ poisson_lpmf(lambda);
+  
+  // penalty to prevent reflection
+  // target += -100*Z[10][1];
   
   if (!self_edges) {
     for (i in 1:N) {
