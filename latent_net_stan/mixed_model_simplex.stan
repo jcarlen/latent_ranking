@@ -40,8 +40,9 @@ parameters {
   simplex[N] receiver_raw;
   real<lower=0> sender_scale;
   real<lower=0> receiver_scale;
-  //simplex[N] Z_raw[D]; //D simplex vectors of length N
-  //real<lower=0> Z_scale[D];
+  //matrix[N,D] Z;
+  simplex[N] Z_raw[D]; //D simplex vectors of length N
+  positive_ordered[D] Z_scale;
 }
 
 transformed parameters {
@@ -49,10 +50,11 @@ transformed parameters {
   real lambda[N*N] = rep_array(0.0, N*N);
   vector[N] sender = (sender_raw-rep_vector(inv(N), N))*sender_scale;
   vector[N] receiver = (receiver_raw-rep_vector(inv(N), N))*receiver_scale;
-  //matrix[N,D] Z;
-  //for (i in 1:D) {
-  //  Z[,i] = (Z_raw[i] - rep_vector(inv(N), N))*Z_scale[i];
-  //}
+  
+  matrix[N,D] Z;
+  for (i in 1:D) {
+    Z[,i] = Z_raw[i]*Z_scale[i];
+  }
       
   // Calculate lambda
   for (i in 1:N) { 
@@ -60,13 +62,13 @@ transformed parameters {
       
       lambda[(i-1)*N + j] += beta0 + sender[i] + receiver[j];
 
-      // if (dist == 1) { //euclidean
-      //   lambda[(i-1)*N + j] +=  -distance(Z[i,], Z[j,]);
-      // }
-      //   
-      // if (dist == 2) { //squared
-      //   lambda[(i-1)*N + j] +=  -squared_distance(Z[i,], Z[j,]);
-      // }
+      if (dist == 1) { //euclidean
+          lambda[(i-1)*N + j] +=  -sqrt(squared_distance(Z[i,], Z[j,]) + .0001); //issues with zero distance (gradient at endpoint?)
+      }
+       
+      if (dist == 2) { //squared
+         lambda[(i-1)*N + j] +=  -squared_distance(Z[i,], Z[j,]);
+       }
       
       lambda[(i-1)*N + j] = exp(lambda[(i-1)*N + j]);
     }
@@ -83,11 +85,12 @@ model {
   sender_scale ~ normal(0, 5);
   receiver_scale ~ normal(0, 5);
   
-  //for (i in 1:D) {
-  //  Z_raw[i] ~ dirichlet(rep_vector(1, N)); //prior of sender
-  //}
+  for (i in 1:D) {
+      //Z[,i] ~ normal(0,2);
+      Z_raw[i] ~ dirichlet(rep_vector(1, N)); 
+  }
   
-  //Z_scale ~ normal(0, 5);
+  //Z_scale ~ normal(0,5);
   
   Y ~ poisson(lambda);
   
@@ -98,4 +101,5 @@ model {
   }
 
 }
+
 
